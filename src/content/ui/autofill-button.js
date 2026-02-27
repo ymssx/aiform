@@ -304,8 +304,10 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
     const totalFields = inputCount + selectCount + textareaCount;
 
     // 估算 token 消耗（粗略：1 token ≈ 4 字符英文 / 1.5 字符中文）
+    // 清洗画像数据：剔除 changeHistory / lastUpdated / id 等无用字段（与 prompt 实际发送一致）
+    const cleanProfile = cleanProfileForEstimate(profile);
     const domTokens = estimateTokens(simplifiedDOM);
-    const profileTokens = estimateTokens(JSON.stringify(profile || {}, null, 2));
+    const profileTokens = estimateTokens(JSON.stringify(cleanProfile, null, 2));
     const memoriesTokens = estimateTokens(memories.map(m => m.content).join(' '));
     const promptBaseTokens = 1200; // prompt 模板本身的固定开销
     const totalEstTokens = domTokens + profileTokens + memoriesTokens + promptBaseTokens;
@@ -818,6 +820,23 @@ function showAIResultBubble(fields) {
     overlay.appendChild(bubble);
     document.body.appendChild(overlay);
   });
+}
+
+/**
+ * 清洗画像数据用于 token 估算（与 prompt-templates.js 中 cleanProfileForPrompt 逻辑一致）
+ * 剔除 changeHistory / lastUpdated / id 等对 AI 填充无用的字段
+ */
+function cleanProfileForEstimate(profile) {
+  if (!profile) return {};
+  const { changeHistory, lastUpdated, id, ...rest } = profile;
+  const cleaned = {};
+  for (const [key, value] of Object.entries(rest)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    cleaned[key] = value;
+  }
+  return cleaned;
 }
 
 /**
