@@ -3,7 +3,7 @@
 // 自动填写按钮 + 补充输入弹窗
 // ============================================
 
-import { extractFormSchema } from '../form-extractor.js';
+import { extractFormSchema, extractFormSchemaWithRetry } from '../form-extractor.js';
 import { fillForm } from '../form-filler.js';
 import { sendMessage } from '../../shared/utils.js';
 import { MSG } from '../../shared/constants.js';
@@ -61,10 +61,11 @@ export function createAutoFillButton() {
  */
 async function handleAutoFillClick() {
   try {
-    // 1. 采集当前表单结构
-    const formSchema = extractFormSchema();
+    // 1. 采集当前表单结构（带重试，支持 SPA 动态渲染）
+    showToast('正在检测表单...', 'info');
+    const formSchema = await extractFormSchemaWithRetry(2000);
     if (formSchema.length === 0) {
-      showToast('当前页面未检测到表单', 'warning');
+      showToast('当前页面未检测到表单，请确认页面上有可填写的输入框', 'warning');
       return;
     }
 
@@ -114,8 +115,8 @@ async function handleAutoFillClick() {
       return;
     }
 
-    // 7. 执行填充
-    const count = fillForm(fillResult.data.fillData);
+    // 7. 执行填充（传入 formSchema 以便通过 _locator 定位无 name/id 的元素）
+    const count = fillForm(fillResult.data.fillData, formSchema);
     showToast(`✅ 已成功填充 ${count} 个字段`, 'success');
 
   } catch (err) {

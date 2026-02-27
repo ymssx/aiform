@@ -1,7 +1,18 @@
 // ============================================
-// 表单数据采集器（增强版）
+// 表单数据采集器（增强版 v3）
 // 多策略智能检测表单区域，大幅提升检测准确率
+// 支持 SPA/Shadow DOM/iframe/动态渲染/现代UI框架
+// 组件库选择器通过 component-adapters.js 统一管理
 // ============================================
+
+import {
+  buildInputSelector,
+  buildContainerSelectors,
+  buildLabelSelectors,
+  inferTypeByAdapters,
+  extractOptionsByAdapters,
+  isAdapterSearchInput,
+} from './component-adapters.js';
 
 /**
  * 提取表单区域内的所有字段数据（提交后用，含 value）
@@ -9,7 +20,7 @@
  * @returns {Array} 精简后的字段数据列表
  */
 export function extractFormFields(formElement) {
-  const inputs = formElement.querySelectorAll(INPUT_SELECTOR);
+  const inputs = getAllInputElements(formElement);
   const fields = [];
 
   inputs.forEach(input => {
@@ -25,24 +36,85 @@ export function extractFormFields(formElement) {
  * @returns {Array} 表单结构数据
  */
 export function extractFormSchema() {
+  const schema = _extractFormSchemaInternal();
+  if (schema.length > 0) return schema;
+
+  // 如果主文档没找到，尝试扫描同源 iframe
+  const iframeSchema = extractFromIframes();
+  if (iframeSchema.length > 0) return iframeSchema;
+
+  return [];
+}
+
+/**
+ * 带重试的表单提取（支持 SPA 动态渲染场景）
+ * 如果首次提取为空，会等待 DOM 变化后重试
+ * @param {number} maxWaitMs - 最长等待毫秒数
+ * @returns {Promise<Array>} 表单结构数据
+ */
+export function extractFormSchemaWithRetry(maxWaitMs = 2000) {
+  return new Promise((resolve) => {
+    // 第一次尝试
+    const schema = extractFormSchema();
+    if (schema.length > 0) {
+      resolve(schema);
+      return;
+    }
+
+    // 等待 DOM 变化后重试
+    let resolved = false;
+    const observer = new MutationObserver(() => {
+      if (resolved) return;
+      const retrySchema = extractFormSchema();
+      if (retrySchema.length > 0) {
+        resolved = true;
+        observer.disconnect();
+        resolve(retrySchema);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'hidden', 'aria-hidden'],
+    });
+
+    // 超时兜底：即使没有 DOM 变化也再试一次
+    setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      observer.disconnect();
+      resolve(extractFormSchema());
+    }, maxWaitMs);
+  });
+}
+
+/**
+ * 内部核心提取逻辑
+ */
+function _extractFormSchemaInternal() {
   const forms = detectFormRegions();
 
   // 如果检测到表单区域，提取所有表单区域的字段（支持页面多表单场景）
   if (forms.length > 0) {
     const schema = [];
-    const seenNames = new Set(); // 去重：同名 radio/checkbox 只保留一个
-    const seenElements = new Set(); // 去重：避免嵌套区域导致同一个input被提取多次
+    const seenNames = new Set();
+    const seenElements = new Set();
 
     for (const form of forms) {
-      const inputs = form.querySelectorAll(INPUT_SELECTOR);
+      const inputs = getAllInputElements(form);
       inputs.forEach(input => {
-        // 避免同一个 input 元素被多个表单区域重复提取
         if (seenElements.has(input)) return;
         seenElements.add(input);
 
+        // 排除下拉搜索框等辅助 input
+        if (isSearchInputInsideDropdown(input)) return;
+        // 过滤不可见的元素（原生 input 必须可见，自定义组件 div 跳过此检查）
+        if (input.tagName === 'INPUT' && !isElementVisible(input)) return;
+
         const field = extractFieldSchema(input);
         if (!field) return;
-        // 同名 radio 和 checkbox 组只保留第一个（它已包含所有 options）
         const inputType = input.type?.toLowerCase();
         if ((inputType === 'radio' || inputType === 'checkbox') && field.name) {
           if (seenNames.has(field.name)) return;
@@ -55,17 +127,16 @@ export function extractFormSchema() {
     if (schema.length > 0) return schema;
   }
 
-  // 回退策略1：扫描页面上所有可见的输入元素（包括 Shadow DOM）
+  // 回退策略：扫描页面上所有可见的输入元素（包括 Shadow DOM）
   const schema = [];
   const allInputs = getAllInputElements(document);
-  const seenNames = new Set(); // 去重：同名 radio/checkbox 只保留一个
+  const seenNames = new Set();
 
   allInputs.forEach(input => {
-    // 使用增强版可见性检测
     if (!isElementVisible(input)) return;
+    if (isSearchInputInsideDropdown(input)) return;
     const field = extractFieldSchema(input);
     if (!field) return;
-    // 同名 radio 和 checkbox 组只保留第一个
     const inputType = input.type?.toLowerCase();
     if ((inputType === 'radio' || inputType === 'checkbox') && field.name) {
       if (seenNames.has(field.name)) return;
@@ -77,31 +148,50 @@ export function extractFormSchema() {
   return schema;
 }
 
+/**
+ * 从同源 iframe 中提取表单结构
+ * @returns {Array}
+ */
+function extractFromIframes() {
+  const iframes = document.querySelectorAll('iframe');
+  const schema = [];
+
+  for (const iframe of iframes) {
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) continue;
+
+      const inputs = getAllInputElements(iframeDoc);
+      const seenNames = new Set();
+
+      inputs.forEach(input => {
+        if (!isElementVisible(input)) return;
+        const field = extractFieldSchema(input);
+        if (!field) return;
+        // 标记来自 iframe
+        field._fromIframe = true;
+        field._iframeSrc = iframe.src || 'inline';
+        const inputType = input.type?.toLowerCase();
+        if ((inputType === 'radio' || inputType === 'checkbox') && field.name) {
+          if (seenNames.has(field.name)) return;
+          seenNames.add(field.name);
+        }
+        schema.push(field);
+      });
+    } catch (e) {
+      // 跨域 iframe 无法访问，忽略
+    }
+  }
+
+  return schema;
+}
+
 // ============================================
-// 输入元素选择器（扩展版）
+// 输入元素选择器（由适配器动态构建）
 // ============================================
 
-/** 基础输入元素选择器 */
-const INPUT_SELECTOR = [
-  'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"])',
-  'select',
-  'textarea',
-  '[contenteditable="true"]',
-  // 扩展：常见 UI 框架的自定义输入组件
-  '[role="textbox"]',
-  '[role="combobox"]',
-  '[role="listbox"]',
-  '[role="spinbutton"]',
-  '[role="searchbox"]',
-  '[role="switch"]',
-  '[role="slider"]',
-  // 新增：更多现代框架自定义组件
-  '[data-testid*="input" i]',
-  '[data-testid*="select" i]',
-  '.ant-input', '.ant-select', '.ant-picker',
-  '.el-input__inner', '.el-select', '.el-date-editor',
-  '.arco-input', '.arco-select',
-].join(', ');
+/** 输入元素选择器（从适配器注册表动态构建，包含原生 + 各组件库的选择器） */
+const INPUT_SELECTOR = buildInputSelector();
 
 /** 统计区域内的可交互输入元素数量 */
 function countInputs(el) {
@@ -132,7 +222,7 @@ function getAllInputElements(root) {
 // ============================================
 
 /**
- * 检测页面中的表单区域（8级策略，逐级回退）
+ * 检测页面中的表单区域（10级策略，逐级回退）
  * @returns {HTMLElement[]} 检测到的表单区域元素数组
  */
 export function detectFormRegions() {
@@ -141,7 +231,7 @@ export function detectFormRegions() {
   // 策略1：原生 <form> 标签（最准确）
   const nativeForms = document.querySelectorAll('form');
   nativeForms.forEach(f => {
-    if (countInputs(f) > 0) regions.add(f);
+    if (countInputs(f) > 0 && isElementVisible(f)) regions.add(f);
   });
 
   // 策略2：ARIA role="form"
@@ -150,35 +240,48 @@ export function detectFormRegions() {
     if (countInputs(f) > 0) regions.add(f);
   });
 
-  // 策略3：含有 data-form / data-testid 等明确标记的容器
-  const markedContainers = document.querySelectorAll(
-    '[data-form], [data-testid*="form" i], [data-cy*="form" i], [class*="form-container" i], [class*="formContainer" i]'
-  );
-  markedContainers.forEach(f => {
-    if (countInputs(f) > 0) regions.add(f);
-  });
+  // 策略3：含有 data-form / data-testid 等明确标记的容器 + 适配器声明的容器
+  const markedSelectors = [
+    '[data-form]', '[data-id="form"]',
+    '[data-testid*="form" i]', '[data-cy*="form" i]',
+    '[class*="form-container" i]', '[class*="formContainer" i]', '[class*="form_container" i]',
+    ...buildContainerSelectors(),
+  ];
+  for (const sel of markedSelectors) {
+    try {
+      document.querySelectorAll(sel).forEach(f => {
+        if (countInputs(f) > 0) regions.add(f);
+      });
+    } catch (e) { /* invalid selector */ }
+  }
 
-  // 如果已经找到了带标记的表单区域，直接返回
-  if (regions.size > 0) return Array.from(regions);
+  // 如果已经找到了带标记的表单区域，去重后返回
+  if (regions.size > 0) return deduplicateRegions(Array.from(regions));
 
   // 策略4：Class/ID 匹配常见表单容器命名（降低门槛到1个输入元素）
   const classPatterns = [
-    '[class*="form" i]:not(button):not(input):not(select):not(textarea)',
-    '[id*="form" i]:not(button):not(input):not(select):not(textarea)',
-    '[class*="register" i]', '[class*="login" i]', '[class*="signup" i]',
+    '[class*="form" i]:not(button):not(input):not(select):not(textarea):not(label):not(span)',
+    '[id*="form" i]:not(button):not(input):not(select):not(textarea):not(label):not(span)',
+    '[class*="register" i]', '[class*="login" i]', '[class*="signup" i]', '[class*="sign-up" i]',
     '[class*="checkout" i]', '[class*="booking" i]', '[class*="apply" i]',
     '[class*="editor" i]', '[class*="profile" i]', '[class*="setting" i]',
-    // 新增：弹窗/抽屉/面板类容器
+    // 弹窗/抽屉/面板类容器（很多表单在弹窗里）
     '[class*="modal" i]', '[class*="dialog" i]', '[class*="drawer" i]',
     '[class*="panel" i]', '[class*="popover" i]', '[class*="overlay" i]',
     '[role="dialog"]', '[role="alertdialog"]',
-    // 新增：更多业务场景
+    // 更多业务场景关键词
     '[class*="search" i]', '[class*="filter" i]', '[class*="contact" i]',
     '[class*="order" i]', '[class*="payment" i]', '[class*="address" i]',
     '[class*="account" i]', '[class*="input-group" i]', '[class*="field" i]',
-    // Ant Design / Element UI 等框架
-    '[class*="ant-form" i]', '[class*="el-form" i]', '[class*="arco-form" i]',
-    '[class*="ivu-form" i]', '[class*="n-form" i]',
+    '[class*="survey" i]', '[class*="questionnaire" i]', '[class*="feedback" i]',
+    '[class*="subscribe" i]', '[class*="newsletter" i]', '[class*="comment" i]',
+    '[class*="review" i]', '[class*="inquiry" i]', '[class*="wizard" i]',
+    '[class*="step" i]', '[class*="onboarding" i]',
+    // Ant Design / Element UI / 各框架的 form
+    // 适配器声明的容器选择器
+    ...buildContainerSelectors(),
+    // 微前端/Web Components 容器
+    '[class*="micro-app" i]', '[class*="qiankun" i]',
   ];
   
   for (const selector of classPatterns) {
@@ -186,9 +289,7 @@ export function detectFormRegions() {
       const candidates = document.querySelectorAll(selector);
       candidates.forEach(el => {
         const inputCount = countInputs(el);
-        // 降低门槛到1个输入元素即可
         if (inputCount >= 1) {
-          // 排除太大的容器（如整个页面布局容器）
           const bodyInputs = countInputs(document.body);
           if (inputCount < bodyInputs * 0.9 || bodyInputs <= 5) {
             regions.add(el);
@@ -198,24 +299,23 @@ export function detectFormRegions() {
     } catch (e) { /* selector可能无效 */ }
   }
 
-  if (regions.size > 0) return Array.from(regions);
+  if (regions.size > 0) return deduplicateRegions(Array.from(regions));
 
-  // 策略5：输入元素密度聚类（为每个 input 找最近的合理容器）
-  const allInputs = Array.from(document.querySelectorAll(INPUT_SELECTOR));
-  if (allInputs.length === 0) return [];
+  // 策略5：通过可见输入元素的密度聚类（改进版，支持多个聚类）
+  const allVisibleInputs = Array.from(getAllInputElements(document)).filter(isElementVisible);
+  if (allVisibleInputs.length === 0) return [];
 
-  // 对每个输入元素，向上寻找"刚好"包含多个输入元素的容器
   const candidateContainers = new Map(); // element -> inputCount
   
-  for (const input of allInputs) {
+  for (const input of allVisibleInputs) {
     let parent = input.parentElement;
     let depth = 0;
     
-    while (parent && parent !== document.body && parent !== document.documentElement && depth < 10) {
+    while (parent && parent !== document.body && parent !== document.documentElement && depth < 12) {
       const count = countInputs(parent);
-      if (count >= 2) {
-        candidateContainers.set(parent, count);
-        // 继续往上找，看有没有更合适的（但不要太大）
+      if (count >= 1) {
+        const existing = candidateContainers.get(parent) || 0;
+        candidateContainers.set(parent, Math.max(existing, count));
       }
       parent = parent.parentElement;
       depth++;
@@ -223,53 +323,162 @@ export function detectFormRegions() {
   }
 
   if (candidateContainers.size > 0) {
-    // 找到"最紧凑"的容器：输入元素数量 / 子元素总数 比例最高的
-    let bestContainer = null;
-    let bestScore = 0;
-    
+    // 收集所有「得分较高」的容器，而非只选一个最佳
+    const scored = [];
     for (const [el, inputCount] of candidateContainers) {
-      // 不要选 body 或过大的容器
       const totalChildren = el.querySelectorAll('*').length;
-      if (totalChildren > 500) continue; // 太大了
+      if (totalChildren > 1000) continue; // 太大了，跳过
       
       const density = inputCount / Math.max(totalChildren, 1);
-      const score = inputCount * density; // 同时考虑数量和密度
-      
-      if (score > bestScore) {
-        bestScore = score;
-        bestContainer = el;
-      }
+      const score = inputCount * density;
+      scored.push({ el, score, inputCount });
     }
     
-    if (bestContainer) {
-      regions.add(bestContainer);
+    // 按得分排序
+    scored.sort((a, b) => b.score - a.score);
+    
+    // 选出得分最高的，以及不被它包含的其他高分容器
+    const selected = [];
+    for (const item of scored) {
+      if (item.score < 0.01) break; // 得分太低
+      // 检查是否被已选中的容器包含（避免重复）
+      const isContained = selected.some(s => s.el.contains(item.el) || item.el.contains(s.el));
+      if (!isContained) {
+        selected.push(item);
+      }
+      if (selected.length >= 5) break; // 最多5个
+    }
+    
+    if (selected.length > 0) {
+      selected.forEach(s => regions.add(s.el));
       return Array.from(regions);
     }
   }
 
-  // 策略6：所有输入元素的最近公共祖先
-  if (allInputs.length >= 2) {
-    const ancestor = findCommonAncestor(allInputs);
+  // 策略6：所有可见输入元素的最近公共祖先
+  if (allVisibleInputs.length >= 2) {
+    const ancestor = findCommonAncestor(allVisibleInputs);
     if (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
       regions.add(ancestor);
       return Array.from(regions);
     }
   }
 
-  // 策略7：退化 - 以 main/article 内的区域为范围
-  const mainContent = document.querySelector('main, article, [role="main"], .main-content, #main-content, .content, #content');
-  if (mainContent && countInputs(mainContent) >= 1) {
-    regions.add(mainContent);
+  // 策略7：检测 Shadow DOM 内部的表单
+  const shadowForms = detectShadowDOMForms(document);
+  if (shadowForms.length > 0) {
+    shadowForms.forEach(f => regions.add(f));
     return Array.from(regions);
   }
 
-  // 策略8：最终回退 - 直接从 body 中搜索所有输入元素
-  // 但只在输入元素较少时这样做（避免误将整个复杂页面当表单）
-  if (allInputs.length >= 1 && allInputs.length <= 30) {
+  // 策略8：退化 - 以 main/article/section 内的区域为范围
+  const contentSelectors = [
+    'main', 'article', '[role="main"]',
+    '.main-content', '#main-content',
+    '.content', '#content',
+    '.page-content', '#page-content',
+    '.container', '.wrapper',
+    'section',
+  ];
+  for (const sel of contentSelectors) {
+    try {
+      const el = document.querySelector(sel);
+      if (el && countInputs(el) >= 1) {
+        regions.add(el);
+        return Array.from(regions);
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // 策略9：检查页面是否有「看起来像表单项」的结构（label + input 对）
+  const labelInputPairs = document.querySelectorAll('label');
+  if (labelInputPairs.length >= 1) {
+    // 找包含这些 label 的最小共同容器
+    const labelsWithInputs = Array.from(labelInputPairs).filter(label => {
+      const forId = label.getAttribute('for');
+      if (forId && document.getElementById(forId)) return true;
+      if (label.querySelector('input, select, textarea')) return true;
+      // label 后面紧跟输入元素
+      const next = label.nextElementSibling;
+      if (next && next.matches(INPUT_SELECTOR)) return true;
+      return false;
+    });
+    
+    if (labelsWithInputs.length >= 1) {
+      const ancestor = findCommonAncestor(labelsWithInputs);
+      if (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+        regions.add(ancestor);
+        return Array.from(regions);
+      }
+    }
+  }
+
+  // 策略10：最终回退 - 直接从 body 中搜索所有输入元素
+  // 放宽限制：最多50个输入元素都允许
+  if (allVisibleInputs.length >= 1 && allVisibleInputs.length <= 50) {
     regions.add(document.body);
   }
 
   return Array.from(regions);
+}
+
+/**
+ * 递归检测 Shadow DOM 中的表单
+ * @param {Document|Element} root
+ * @returns {HTMLElement[]}
+ */
+function detectShadowDOMForms(root) {
+  const results = [];
+  const allElements = root.querySelectorAll('*');
+  
+  for (const el of allElements) {
+    if (el.shadowRoot) {
+      // 检查 Shadow DOM 内部是否有 form
+      const forms = el.shadowRoot.querySelectorAll('form, [role="form"]');
+      forms.forEach(f => {
+        if (countInputs(f) > 0) results.push(f);
+      });
+      // 递归
+      results.push(...detectShadowDOMForms(el.shadowRoot));
+      // 如果 Shadow DOM 内有输入元素但没有 form 标签，把宿主元素当容器
+      if (results.length === 0) {
+        const inputs = el.shadowRoot.querySelectorAll(INPUT_SELECTOR);
+        if (inputs.length > 0) results.push(el);
+      }
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * 去重：移除被其他区域包含的子区域（保留最小的有效容器）
+ * @param {HTMLElement[]} regions
+ * @returns {HTMLElement[]}
+ */
+function deduplicateRegions(regions) {
+  if (regions.length <= 1) return regions;
+  
+  // 按包含的输入元素数量排序（少的优先，即更精确的容器优先）
+  regions.sort((a, b) => countInputs(a) - countInputs(b));
+  
+  const result = [];
+  for (const region of regions) {
+    // 如果这个区域不被已选中的任何区域包含
+    const isContainedBySelected = result.some(r => r.contains(region));
+    // 也不包含已选中的区域（即不是更大的父容器）
+    const containsSelected = result.some(r => region.contains(r));
+    
+    if (!isContainedBySelected) {
+      if (containsSelected) {
+        // 当前区域包含已选中的区域，跳过（优先保留更精确的小区域）
+        continue;
+      }
+      result.push(region);
+    }
+  }
+  
+  return result;
 }
 
 // ============================================
@@ -289,12 +498,11 @@ const IGNORE_NAME_PATTERNS = [
  */
 function extractSingleField(input) {
   const type = getInputType(input);
-  const name = input.name || input.id || '';
+  let name = input.name || input.id || '';
 
   // 跳过不需要的字段
   if (SKIP_TYPES.includes(type)) return null;
   if (type === 'password') return null;
-  if (!name && !input.id && !input.getAttribute('aria-label')) return null;
   if (name && IGNORE_NAME_PATTERNS.some(p => p.test(name))) return null;
 
   // radio/checkbox 未选中的跳过
@@ -304,9 +512,19 @@ function extractSingleField(input) {
   const value = getFieldValue(input);
   if (!value) return null;
 
+  const label = findLabel(input);
+  // 尝试从祖先获取标识
+  if (!name && !input.getAttribute('aria-label')) {
+    const dataIdAncestor = input.closest('[data-id]');
+    if (dataIdAncestor) name = dataIdAncestor.getAttribute('data-id');
+    if (!name && label) name = '_label_' + label.replace(/[\s/\\]+/g, '_').replace(/[^a-zA-Z0-9_\u4e00-\u9fff]/g, '').substring(0, 50);
+    if (!name) name = generateCSSPath(input);
+    if (!name) return null;
+  }
+
   return {
     name: name || input.getAttribute('aria-label') || '',
-    label: findLabel(input),
+    label: label,
     type: type,
     value: value,
     placeholder: input.placeholder || '',
@@ -318,20 +536,41 @@ function extractSingleField(input) {
  */
 function extractFieldSchema(input) {
   const type = getInputType(input);
-  const name = input.name || input.id || '';
+  let name = input.name || input.id || '';
 
   if (SKIP_TYPES.includes(type)) return null;
-  if (!name && !input.id && !input.getAttribute('aria-label')) return null;
   if (name && IGNORE_NAME_PATTERNS.some(p => p.test(name))) return null;
 
   // 如果字段是 disabled 或 readonly 且隐藏的，跳过
   if (input.disabled && input.offsetParent === null) return null;
 
+  // 尝试从祖先元素获取标识（应对 input 没有 name/id 的情况）
+  const label = findLabel(input);
+  if (!name && !input.getAttribute('aria-label')) {
+    // 策略1：从最近带 data-id 的祖先获取
+    const dataIdAncestor = input.closest('[data-id]');
+    if (dataIdAncestor) {
+      name = dataIdAncestor.getAttribute('data-id');
+    }
+    // 策略2：从 label 文本生成 name（去空格、转下划线）
+    if (!name && label) {
+      name = '_label_' + label.replace(/[\s/\\]+/g, '_').replace(/[^a-zA-Z0-9_\u4e00-\u9fff]/g, '').substring(0, 50);
+    }
+    // 策略3：用 CSS 路径生成唯一标识
+    if (!name) {
+      name = generateCSSPath(input);
+    }
+    // 如果所有策略都失败了，才跳过
+    if (!name) return null;
+  }
+
   const schema = {
     name: name || input.getAttribute('aria-label') || '',
-    label: findLabel(input),
+    label: label,
     type: type,
     placeholder: input.placeholder || '',
+    // 保存定位辅助信息（用于 fillForm 按多种方式查找元素）
+    _locator: buildLocator(input),
   };
 
   // 对于 select，提供选项列表
@@ -353,6 +592,14 @@ function extractFieldSchema(input) {
           text: o.textContent.trim(),
         }));
       }
+    }
+  }
+
+  // 对于自定义下拉组件，通过适配器提取选项
+  if (type === 'select' && !schema.options) {
+    const customOptions = extractOptionsByAdapters(input);
+    if (customOptions && customOptions.length > 0) {
+      schema.options = customOptions;
     }
   }
 
@@ -406,6 +653,10 @@ function getInputType(input) {
   
   // contenteditable
   if (input.getAttribute('contenteditable') === 'true') return 'textarea';
+
+  // 通过适配器注册表推断自定义组件类型
+  const adapterType = inferTypeByAdapters(input);
+  if (adapterType) return adapterType;
   
   return 'text';
 }
@@ -474,24 +725,32 @@ function findLabel(input) {
     if (text && text.length < 40) return text;
   }
 
-  // 6. 父元素内的 label 类元素
+  // 6. 父元素内的 label 类元素（通过适配器注册的 labelSelector）
   const parent = input.parentElement;
+  const adapterLabelSelectors = buildLabelSelectors();
+  const labelSelectorStr = adapterLabelSelectors.join(', ');
+  
   if (parent) {
-    const labelEl = parent.querySelector('.label, .form-label, [class*="label" i], [class*="title" i]:not(h1):not(h2):not(h3)');
-    if (labelEl && labelEl !== input && !labelEl.contains(input)) {
-      const text = cleanLabelText(labelEl.textContent);
-      if (text && text.length < 40) return text;
-    }
+    try {
+      const labelEl = parent.querySelector(labelSelectorStr);
+      if (labelEl && labelEl !== input && !labelEl.contains(input)) {
+        const text = cleanLabelText(labelEl.textContent);
+        if (text && text.length < 40) return text;
+      }
+    } catch (e) { /* ignore */ }
   }
 
-  // 7. 父级的父级查找（表单通常是 row > label + input 结构）
-  const grandParent = parent?.parentElement;
-  if (grandParent) {
-    const labelEl = grandParent.querySelector('label, .label, .form-label, [class*="label" i]');
-    if (labelEl && labelEl !== input && !labelEl.contains(input)) {
-      const text = cleanLabelText(labelEl.textContent);
-      if (text && text.length < 40) return text;
-    }
+  // 7. 向上多层查找（最多 6 层祖先）
+  let ancestor = parent;
+  for (let i = 0; i < 6 && ancestor && ancestor !== document.body; i++) {
+    try {
+      const labelEl = ancestor.querySelector(labelSelectorStr);
+      if (labelEl && labelEl !== input && !labelEl.contains(input)) {
+        const text = cleanLabelText(labelEl.textContent);
+        if (text && text.length < 40) return text;
+      }
+    } catch (e) { /* ignore */ }
+    ancestor = ancestor.parentElement;
   }
 
   // 8. title 属性
@@ -526,6 +785,73 @@ function humanizeName(name) {
     .trim();
 }
 
+
+
+/**
+ * 生成元素的 CSS 路径作为唯一标识
+ */
+function generateCSSPath(input) {
+  const parts = [];
+  let el = input;
+  let depth = 0;
+  
+  while (el && el !== document.body && depth < 5) {
+    let selector = el.tagName.toLowerCase();
+    if (el.id) {
+      selector += '#' + el.id;
+      parts.unshift(selector);
+      break;
+    }
+    if (el.className && typeof el.className === 'string') {
+      // 取第一个有意义的 class
+      const cls = el.className.split(/\s+/).find(c => c.length > 2 && !/^(undefined|null)$/.test(c));
+      if (cls) selector += '.' + cls;
+    }
+    // 添加 nth-child
+    const parent = el.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.children).filter(c => c.tagName === el.tagName);
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(el) + 1;
+        selector += ':nth-of-type(' + index + ')';
+      }
+    }
+    parts.unshift(selector);
+    el = el.parentElement;
+    depth++;
+  }
+  
+  return parts.length > 0 ? '_css_' + parts.join(' > ') : '';
+}
+
+/**
+ * 构建元素的定位信息（用于 fillForm 时按多种方式查找元素）
+ */
+function buildLocator(input) {
+  const locator = {};
+  
+  if (input.name) locator.name = input.name;
+  if (input.id) locator.id = input.id;
+  
+  // data-id（自定义组件常用）
+  const dataIdAncestor = input.closest('[data-id]');
+  if (dataIdAncestor) locator.dataId = dataIdAncestor.getAttribute('data-id');
+  
+  // CSS 路径
+  locator.cssPath = generateCSSPath(input);
+  
+  // class 列表（用于最终回退匹配）
+  if (input.className && typeof input.className === 'string') {
+    locator.className = input.className.trim();
+  }
+  
+  // 标签类型
+  locator.tagName = input.tagName.toLowerCase();
+  locator.inputType = input.type?.toLowerCase() || '';
+  
+  return locator;
+}
+
 /**
  * 查找多个元素的最近公共祖先
  */
@@ -544,34 +870,86 @@ function findCommonAncestor(elements) {
 }
 
 /**
- * 判断元素是否可见（增强版）
+ * 判断 input 是否是下拉组件内的搜索输入框（不应该被当作表单字段）
+ * 例如 wg-select 内的 wg-select-list_search-input
+ */
+function isSearchInputInsideDropdown(input) {
+  if (input.tagName !== 'INPUT') return false;
+  
+  // 通过适配器判断
+  if (isAdapterSearchInput(input)) return true;
+  
+  // 通用规则：检查 class 名
+  const cls = input.className || '';
+  if (/search[-_]?input|list[-_]?search/i.test(cls)) {
+    const dropdownParent = input.closest(
+      '[class*="select-list" i], [class*="dropdown" i], [class*="picker-panel" i], [class*="popup" i]'
+    );
+    if (dropdownParent) return true;
+  }
+  
+  // 检查是否在 display:none 的下拉列表容器内
+  const hiddenParent = input.closest('[style*="display: none"], [style*="display:none"]');
+  if (hiddenParent) {
+    // 只有隐藏容器的祖先是某种下拉/选择组件时才排除
+    const isInDropdown = hiddenParent.closest(
+      '.ant-select, .el-select, .arco-select, .n-select, .ivu-select, .t-select, ' +
+      '[role="combobox"], [role="listbox"]'
+    );
+    if (isInDropdown) return true;
+  }
+  
+  return false;
+}
+
+/**
+ * 判断元素是否可见（增强版 v2）
+ * 综合多种策略判断，避免误判
  */
 function isElementVisible(el) {
   if (!el) return false;
   
   try {
-    const style = getComputedStyle(el);
+    // 快速排除：aria-hidden="true" 的元素
+    if (el.getAttribute('aria-hidden') === 'true') {
+      // 但如果它内部有实际的 input，可能是框架包装层，不应跳过
+      if (!el.matches(INPUT_SELECTOR)) return false;
+    }
     
-    // 明确隐藏的
-    if (style.display === 'none') return false;
-    if (style.visibility === 'hidden') return false;
-    if (style.opacity === '0') return false;
+    // 向上遍历检查祖先元素是否隐藏（最多检查10层）
+    let current = el;
+    let depth = 0;
+    while (current && current !== document.body && depth < 10) {
+      const style = getComputedStyle(current);
+      if (style.display === 'none') return false;
+      if (style.visibility === 'hidden' && current === el) return false; // visibility只检查自身
+      if (style.opacity === '0' && current === el) return false; // opacity只检查自身
+      current = current.parentElement;
+      depth++;
+    }
     
-    // offsetParent 为 null 的元素通常是隐藏的
-    // 但 position:fixed/sticky 和 Shadow DOM 内的元素除外
+    // offsetParent 检查
     if (el.offsetParent === null) {
+      const style = getComputedStyle(el);
       const pos = style.position;
       if (pos !== 'fixed' && pos !== 'sticky') {
-        // 再检查一次是否在 Shadow DOM 中（Shadow DOM 内 offsetParent 可能为 null）
+        // Shadow DOM 内的元素 offsetParent 可能为 null
         if (!el.getRootNode || el.getRootNode() === document) {
-          return false;
+          // 再给一次机会：检查是否有实际尺寸（某些框架的隐藏方式不影响布局）
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return false;
         }
       }
     }
     
+    // 检查是否在视口外（但不排除，因为可能需要滚动才能看到）
+    // 只排除尺寸为 0 的元素
     const rect = el.getBoundingClientRect();
-    // 元素尺寸为 0 也视为不可见（但允许极小的元素，如某些自定义组件）
-    if (rect.width === 0 && rect.height === 0) return false;
+    if (rect.width === 0 && rect.height === 0) {
+      // 最后机会：某些自定义组件高度为0但通过 overflow 展示
+      const style = getComputedStyle(el);
+      if (style.overflow !== 'visible') return false;
+    }
     
     return true;
   } catch (e) {
