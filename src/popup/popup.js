@@ -39,7 +39,7 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
     // 高亮当前选中的预设
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    showPopupToast('已填入预设，请填写 API Key 后保存', '#667eea');
+    showPopupToast('Preset applied. Please enter API Key and save.', '#667eea');
   });
 });
 
@@ -71,10 +71,10 @@ function updateStatus(config) {
   const indicator = document.getElementById('status-indicator');
   if (config.apiKey) {
     indicator.className = 'status status-ok';
-    indicator.textContent = `✅ 已配置 · ${config.modelName || 'unknown'} · 就绪`;
+    indicator.textContent = `✅ Configured · ${config.modelName || 'unknown'} · Ready`;
   } else {
     indicator.className = 'status status-warn';
-    indicator.textContent = '⚠️ 未配置 API Key';
+    indicator.textContent = '⚠️ API Key not configured';
   }
 }
 
@@ -92,17 +92,17 @@ document.getElementById('saveConfigBtn').addEventListener('click', async () => {
 
   const result = await chrome.runtime.sendMessage({ type: MSG.SAVE_CONFIG, data: config });
   if (result.success) {
-    showPopupToast('设置已保存', '#4CAF50');
+    showPopupToast('Settings saved', '#4CAF50');
     updateStatus(config);
   } else {
-    showPopupToast('保存失败', '#f44336');
+    showPopupToast('Save failed', '#f44336');
   }
 });
 
 document.getElementById('clearAllBtn').addEventListener('click', async () => {
-  if (!confirm('确定要清空所有数据吗？包括用户信息和历史记录。')) return;
+  if (!confirm('Are you sure you want to clear all data? This includes user profile and history records.')) return;
   await chrome.runtime.sendMessage({ type: MSG.CLEAR_ALL });
-  showPopupToast('数据已清空', '#4CAF50');
+  showPopupToast('All data cleared', '#4CAF50');
   loadConfig();
 });
 
@@ -116,7 +116,7 @@ async function loadProfile() {
   const container = document.getElementById('profile-container');
 
   if (!result.success || !result.data) {
-    container.innerHTML = '<div class="empty-state">暂无信息</div>';
+    container.innerHTML = '<div class="empty-state">No data yet</div>';
     return;
   }
 
@@ -129,59 +129,59 @@ function renderProfile(profile, container) {
 
   // 个人信息
   const personal = profile.personal || {};
-  html += buildEditableSection('👤 个人信息', 'personal', personal, {
-    name: '姓名', gender: '性别', birthday: '生日', idCard: '身份证',
+  html += buildEditableSection('👤 Personal Info', 'personal', personal, {
+    name: 'Name', gender: 'Gender', birthday: 'Birthday', idCard: 'ID Card',
   });
 
   // 联系方式
   const contact = profile.contact || {};
-  html += buildEditableSection('📱 联系方式', 'contact', contact, {
-    phone: '手机', email: '邮箱', wechat: '微信',
+  html += buildEditableSection('📱 Contact', 'contact', contact, {
+    phone: 'Phone', email: 'Email', wechat: 'WeChat',
   });
 
   // 地址
   html += '<div class="profile-section">';
-  html += '<div class="profile-title">📍 地址信息</div>';
+  html += '<div class="profile-title">📍 Address</div>';
   if (profile.addresses && profile.addresses.length > 0) {
     profile.addresses.forEach((addr, idx) => {
       html += `<div class="profile-edit-row">
-        <label class="profile-edit-label">${addr.label || '地址' + (idx + 1)}:</label>
+        <label class="profile-edit-label">${addr.label || 'Address ' + (idx + 1)}:</label>
         <input class="profile-edit-input" data-category="address" data-index="${idx}" data-key="fullAddress" value="${escapeAttr(addr.fullAddress || '')}">
       </div>`;
     });
   } else {
     html += `<div class="profile-edit-row">
-      <label class="profile-edit-label">地址:</label>
-      <input class="profile-edit-input" data-category="address" data-index="0" data-key="fullAddress" value="" placeholder="暂无，可手动添加">
+        <label class="profile-edit-label">Address:</label>
+      <input class="profile-edit-input" data-category="address" data-index="0" data-key="fullAddress" value="" placeholder="None yet, add manually">
     </div>`;
   }
   html += '</div>';
 
   // 工作
   const work = profile.work || {};
-  html += buildEditableSection('💼 工作信息', 'work', work, {
-    company: '公司', department: '部门', position: '职位', workPhone: '工作电话',
+  html += buildEditableSection('💼 Work', 'work', work, {
+    company: 'Company', department: 'Department', position: 'Position', workPhone: 'Work Phone',
   });
 
   // 教育
   const education = profile.education || {};
-  html += buildEditableSection('🎓 教育信息', 'education', education, {
-    school: '学校', major: '专业', degree: '学历', graduationYear: '毕业年份',
+  html += buildEditableSection('🎓 Education', 'education', education, {
+    school: 'School', major: 'Major', degree: 'Degree', graduationYear: 'Graduation Year',
   });
 
   // 自定义字段
   const custom = profile.custom || {};
   if (Object.keys(custom).length > 0) {
-    html += buildEditableSection('📎 其他信息', 'custom', custom, null);
+    html += buildEditableSection('📎 Other', 'custom', custom, null);
   }
 
   // 最后更新时间
   if (profile.lastUpdated) {
-    html += `<div style="text-align:center;font-size:11px;color:#999;margin-top:10px">最后更新: ${new Date(profile.lastUpdated).toLocaleString()}</div>`;
+    html += `<div style="text-align:center;font-size:11px;color:#999;margin-top:10px">Last updated: ${new Date(profile.lastUpdated).toLocaleString()}</div>`;
   }
 
   // 保存按钮
-  html += '<button id="saveProfileBtn" class="btn btn-primary" style="margin-top:12px">💾 保存修改</button>';
+  html += '<button id="saveProfileBtn" class="btn btn-primary" style="margin-top:12px">💾 Save Changes</button>';
 
   container.innerHTML = html;
 
@@ -205,7 +205,7 @@ function buildEditableSection(title, category, data, fieldDefs) {
       const value = data[key] || '';
       html += `<div class="profile-edit-row">
         <label class="profile-edit-label">${label}:</label>
-        <input class="profile-edit-input" data-category="${category}" data-key="${key}" value="${escapeAttr(value)}" placeholder="未填写">
+        <input class="profile-edit-input" data-category="${category}" data-key="${key}" value="${escapeAttr(value)}" placeholder="Not filled">
       </div>`;
     }
     // 也展示不在预定义中但已有数据的字段
@@ -213,7 +213,7 @@ function buildEditableSection(title, category, data, fieldDefs) {
       if (!value || fieldDefs[key]) continue;
       html += `<div class="profile-edit-row">
         <label class="profile-edit-label">${key}:</label>
-        <input class="profile-edit-input" data-category="${category}" data-key="${key}" value="${escapeAttr(value)}" placeholder="未填写">
+        <input class="profile-edit-input" data-category="${category}" data-key="${key}" value="${escapeAttr(value)}" placeholder="Not filled">
       </div>`;
     }
   } else {
@@ -261,7 +261,7 @@ async function saveProfileFromUI() {
       const index = parseInt(input.dataset.index, 10);
       if (!profile.addresses) profile.addresses = [];
       if (!profile.addresses[index]) {
-        profile.addresses[index] = { label: '默认地址' };
+        profile.addresses[index] = { label: 'Default Address' };
       }
       profile.addresses[index][key] = value;
       profile.addresses[index].fullAddress = value;
@@ -281,9 +281,9 @@ async function saveProfileFromUI() {
   try {
     await chrome.runtime.sendMessage({ type: MSG.SAVE_PROFILE, data: profile });
     currentProfile = profile;
-    showPopupToast('个人信息已保存', '#4CAF50');
+    showPopupToast('Profile saved', '#4CAF50');
   } catch (e) {
-    showPopupToast('保存失败: ' + e.message, '#f44336');
+    showPopupToast('Save failed: ' + e.message, '#f44336');
   }
 }
 
@@ -294,7 +294,7 @@ async function loadHistory() {
   const container = document.getElementById('history-container');
 
   if (!result.success || !result.data || result.data.length === 0) {
-    container.innerHTML = '<div class="empty-state">暂无历史记录</div>';
+    container.innerHTML = '<div class="empty-state">No history records</div>';
     return;
   }
 
@@ -304,9 +304,9 @@ async function loadHistory() {
     const fieldCount = record.fields ? record.fields.length : 0;
     html += `
       <div class="record-item">
-        <span class="record-delete" data-id="${record.id}">删除</span>
-        <div class="record-name">${record.formName || '未命名表单'}</div>
-        <div class="record-meta">${record.domain} · ${fieldCount} 个字段 · ${time}</div>
+        <span class="record-delete" data-id="${record.id}">Delete</span>
+        <div class="record-name">${record.formName || 'Unnamed Form'}</div>
+        <div class="record-meta">${record.domain} · ${fieldCount} fields · ${time}</div>
       </div>
     `;
   });
@@ -316,7 +316,7 @@ async function loadHistory() {
   container.querySelectorAll('.record-delete').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
-      if (!confirm('确定删除此条记录？')) return;
+      if (!confirm('Are you sure you want to delete this record?')) return;
       await chrome.runtime.sendMessage({ type: MSG.DELETE_RECORD, data: { id } });
       loadHistory();
     });

@@ -1,256 +1,255 @@
+# 🤖 AI Form Helper
 
-# 🤖 AI 表单助手 (Form Helper)
+> AI-powered intelligent form data extraction & auto-fill Chrome extension
 
-> AI 驱动的智能表单数据提取与自动填写 Chrome 浏览器插件
-
-一款基于 Chrome Extension Manifest V3 的浏览器插件，通过 AI 大模型（兼容 OpenAI 协议）智能分析页面 DOM 结构，实现表单字段的自动识别、数据提取和一键填写。支持主流前端组件库，具备用户画像记忆和跨页面数据复用能力。
+A Chrome extension built on Manifest V3 that leverages AI large language models (OpenAI-compatible protocol) to intelligently analyze page DOM structures, enabling automatic form field recognition, data extraction, and one-click filling. Supports major frontend component libraries with user profile memory and cross-page data reuse capabilities.
 
 ---
 
-## ✨ 核心特性
+## ✨ Key Features
 
-### 🧠 AI 驱动的智能填充
-- **DOM 结构分析**：AI 直接分析简化后的表单 DOM HTML，精准理解每个字段的语义和用途
-- **多源数据融合**：综合用户画像、AI 记忆、用户实时补充三大数据源，智能决策填充内容
-- **优先级机制**：用户本次补充 > 相关记忆 > 历史画像，确保填充内容符合当前意图
-- **智能生成模式**：可选开启 AI 智能生成，为没有历史数据的字段自动生成合理的模拟内容
+### 🧠 AI-Driven Smart Filling
+- **DOM Structure Analysis**: AI directly analyzes simplified form DOM HTML to precisely understand the semantics and purpose of each field
+- **Multi-Source Data Fusion**: Combines user profile, AI memory, and real-time user input to intelligently decide fill content
+- **Priority Mechanism**: Current user input > Related memories > Historical profile, ensuring fill content matches current intent
+- **Smart Generation Mode**: Optionally enable AI smart generation to auto-generate reasonable mock content for fields without historical data
 
-### 📋 表单数据提取
-- **多策略监听**：原生 submit 事件、提交按钮点击、Enter 键提交、Ajax(fetch/XHR) 请求拦截
-- **AI 结构化提取**：将原始表单数据通过 AI 转换为结构化 JSON（含语义分类、标准化标签）
-- **自动画像积累**：每次表单提交后自动将数据合并到用户画像，越用越智能
+### 📋 Form Data Extraction
+- **Multi-Strategy Listening**: Native submit events, submit button clicks, Enter key submission, Ajax (fetch/XHR) request interception
+- **AI Structured Extraction**: Converts raw form data into structured JSON via AI (with semantic classification, standardized labels)
+- **Auto Profile Accumulation**: Automatically merges data into user profile after each form submission — gets smarter over time
 
-### 🧩 广泛的组件库支持
-通过**可插拔的适配器注册表**架构，支持以下组件库的表单元素识别与填充：
+### 🧩 Extensive Component Library Support
+Through a **pluggable adapter registry** architecture, the following component libraries are supported for form element recognition and filling:
 
-| 组件库 | 状态 | 支持元素 |
-|--------|------|----------|
-| **原生 HTML** | ✅ 内置 | input, select, textarea, contenteditable |
-| **Ant Design** | ✅ 适配 | Input, Select, DatePicker, Cascader, Radio, Checkbox, Switch 等 |
-| **Element UI / Plus** | ✅ 适配 | Input, Select, DateEditor, Cascader, Radio, Checkbox, Switch 等 |
-| **TDesign** | ✅ 适配 | Input, Select, DatePicker, Textarea |
-| **Arco Design** | ✅ 适配 | Input, Select, Picker, Cascader, Radio, Checkbox |
-| **Material UI (MUI)** | ✅ 适配 | Input, Select, TextField, Autocomplete |
-| **Naive UI** | ✅ 适配 | Input, Select, DatePicker |
-| **iView / View Design** | ✅ 适配 | Input, Select, DatePicker |
-| **Chakra UI** | ✅ 适配 | Input, Select |
-| **WG Components** | ✅ 适配 | Input, Select（含自定义下拉选项提取与填充） |
-| **mod-form** | ✅ 适配 | 自定义表单框架 |
+| Component Library | Status | Supported Elements |
+|-------------------|--------|--------------------|
+| **Native HTML** | ✅ Built-in | input, select, textarea, contenteditable |
+| **Ant Design** | ✅ Adapted | Input, Select, DatePicker, Cascader, Radio, Checkbox, Switch, etc. |
+| **Element UI / Plus** | ✅ Adapted | Input, Select, DateEditor, Cascader, Radio, Checkbox, Switch, etc. |
+| **TDesign** | ✅ Adapted | Input, Select, DatePicker, Textarea |
+| **Arco Design** | ✅ Adapted | Input, Select, Picker, Cascader, Radio, Checkbox |
+| **Material UI (MUI)** | ✅ Adapted | Input, Select, TextField, Autocomplete |
+| **Naive UI** | ✅ Adapted | Input, Select, DatePicker |
+| **iView / View Design** | ✅ Adapted | Input, Select, DatePicker |
+| **Chakra UI** | ✅ Adapted | Input, Select |
+| **WG Components** | ✅ Adapted | Input, Select (with custom dropdown option extraction & filling) |
+| **mod-form** | ✅ Adapted | Custom form framework |
 
-### 🔮 记忆系统
-- **自动记忆提取**：AI 从表单数据和用户输入中自动提取有价值的记忆（出行计划、偏好习惯等）
-- **分类管理**：intent（意图计划）、preference（偏好）、fact（事实）、context（上下文）
-- **时效管理**：支持设置过期时间，自动清理过期记忆
-- **域名关联**：记忆可按域名隔离或全局共享
+### 🔮 Memory System
+- **Auto Memory Extraction**: AI automatically extracts valuable memories from form data and user input (travel plans, preferences, etc.)
+- **Category Management**: intent (plans), preference (habits), fact (facts), context (contextual info)
+- **Expiry Management**: Supports expiration time settings with automatic cleanup of expired memories
+- **Domain Association**: Memories can be isolated by domain or shared globally
 
-### 🔌 兼容多种 AI 后端
-- **通义千问**（阿里云 DashScope）
+### 🔌 Multiple AI Backend Compatibility
+- **Qwen** (Alibaba Cloud DashScope)
 - **DeepSeek**
-- **OpenAI** (GPT-4o-mini 等)
-- **Ollama 本地模型**（如 qwen2.5:7b）
-- 任何兼容 OpenAI Chat Completions 协议的服务
+- **OpenAI** (GPT-4o-mini, etc.)
+- **Ollama Local Models** (e.g., qwen2.5:7b)
+- Any service compatible with the OpenAI Chat Completions protocol
 
 ---
 
-## 📸 功能预览
+## 📸 Feature Preview
 
-### 使用流程
+### Usage Flow
 
 ```
-页面加载 → 检测表单 → 显示浮动按钮(📝)
-    ↓ 点击按钮
-提取简化 DOM → 获取画像+记忆 → 弹出补充输入弹窗
-    ↓ 确认填写
-显示 Token 估算 → 调用 AI 分析 → 展示填充方案
-    ↓ 确认填充
-执行 DOM 填充 → 触发事件 → 更新画像+记忆
+Page Load → Detect Form → Show Floating Button (📝)
+    ↓ Click Button
+Extract Simplified DOM → Get Profile + Memories → Show Supplementary Input Dialog
+    ↓ Confirm Fill
+Show Token Estimate → Call AI Analysis → Display Fill Plan
+    ↓ Confirm Execution
+Execute DOM Fill → Trigger Events → Update Profile + Memories
 ```
 
-### 弹窗界面说明
-- **📋 已有信息**：展示从历史积累的用户画像摘要
-- **🧠 AI 记忆**：展示与当前域名相关的记忆条目
-- **⚡ 检测到的表单区域**：显示识别到的字段数量和 Token 消耗预估
-- **📝 补充或修改信息**：自然语言输入框，支持临时修改或补充数据
-- **✨ AI 智能生成开关**：开启后为所有空字段生成合理模拟数据
+### Dialog Interface
+- **📋 Existing Info**: Displays a summary of the accumulated user profile
+- **🧠 AI Memories**: Shows memory entries related to the current domain
+- **⚡ Detected Form Area**: Shows the number of recognized fields and estimated token consumption
+- **📝 Supplement or Modify**: Natural language input for temporary modifications or additions
+- **✨ AI Smart Generation Toggle**: When enabled, generates reasonable mock data for all empty fields
 
 ---
 
-## 🏗️ 项目架构
+## 🏗️ Project Architecture
 
 ```
 form-helper/
-├── manifest.json                    # Chrome Extension 配置（Manifest V3）
-├── package.json                     # 项目元数据
-├── build.js                         # 构建脚本（ES Module → IIFE 打包）
-├── test.html                        # 本地测试表单页面
+├── manifest.json                    # Chrome Extension config (Manifest V3)
+├── package.json                     # Project metadata
+├── build.js                         # Build script (ES Module → IIFE bundling)
+├── test.html                        # Local test form page
 │
 ├── src/
-│   ├── shared/                      # 公共模块
-│   │   ├── constants.js             # 消息类型、存储Key、默认配置等常量
-│   │   └── utils.js                 # 通用工具函数（消息通信、ID生成等）
+│   ├── shared/                      # Shared modules
+│   │   ├── constants.js             # Message types, storage keys, default configs
+│   │   └── utils.js                 # Utility functions (messaging, ID generation, etc.)
 │   │
 │   ├── background/                  # Background Service Worker
-│   │   ├── index.js                 # 入口，注册消息监听
-│   │   ├── message-router.js        # 消息路由器，处理所有消息类型
-│   │   ├── ai-service.js            # AI 服务层，封装 OpenAI 兼容协议调用
-│   │   ├── prompt-templates.js      # Prompt 模板管理（提取/填充/记忆）
-│   │   └── storage-manager.js       # Chrome Storage 读写封装
+│   │   ├── index.js                 # Entry point, registers message listeners
+│   │   ├── message-router.js        # Message router, handles all message types
+│   │   ├── ai-service.js            # AI service layer, wraps OpenAI-compatible API calls
+│   │   ├── prompt-templates.js      # Prompt template management (extraction/filling/memory)
+│   │   └── storage-manager.js       # Chrome Storage read/write wrapper
 │   │
 │   ├── content/                     # Content Script
-│   │   ├── index.js                 # 入口，初始化监听和按钮
-│   │   ├── form-extractor.js        # 表单 DOM 提取与简化
-│   │   ├── form-filler.js           # 表单填充执行器
-│   │   ├── form-observer.js         # 表单提交监听（多策略）
-│   │   ├── component-adapters.js    # 组件库适配器注册表
-│   │   └── ui/                      # UI 组件
-│   │       ├── autofill-button.js   # 浮动按钮 + 补充输入弹窗 + AI结果气泡
-│   │       ├── confirm-dialog.js    # 数据确认弹窗
-│   │       └── styles.css           # 基础样式
+│   │   ├── index.js                 # Entry point, initializes listeners and button
+│   │   ├── form-extractor.js        # Form DOM extraction & simplification
+│   │   ├── form-filler.js           # Form fill executor
+│   │   ├── form-observer.js         # Form submission listener (multi-strategy)
+│   │   ├── component-adapters.js    # Component library adapter registry
+│   │   └── ui/                      # UI Components
+│   │       ├── autofill-button.js   # Floating button + input dialog + AI result bubble
+│   │       ├── confirm-dialog.js    # Data confirmation dialog
+│   │       └── styles.css           # Base styles
 │   │
-│   └── popup/                       # 弹出页面（点击扩展图标）
-│       ├── index.html               # Popup HTML（设置/画像/历史三Tab）
-│       └── popup.js                 # Popup 逻辑
+│   └── popup/                       # Popup page (extension icon click)
+│       ├── index.html               # Popup HTML (Settings / Profile / History tabs)
+│       └── popup.js                 # Popup logic
 │
-└── dist/                            # 构建输出目录（加载到 Chrome）
+└── dist/                            # Build output directory (load into Chrome)
 ```
 
-### 模块通信流程
+### Module Communication Flow
 
 ```mermaid
 graph TB
-    subgraph "Content Script（页面注入）"
-        A[form-observer] -->|监听提交| B[form-extractor]
-        C[autofill-button] -->|提取 DOM| B
-        B -->|简化 DOM| C
-        D[form-filler] -->|执行填充| E[页面表单]
-        F[component-adapters] -.->|适配器规则| B
-        F -.->|适配器规则| D
+    subgraph "Content Script (Page Injection)"
+        A[form-observer] -->|Listen Submit| B[form-extractor]
+        C[autofill-button] -->|Extract DOM| B
+        B -->|Simplified DOM| C
+        D[form-filler] -->|Execute Fill| E[Page Form]
+        F[component-adapters] -.->|Adapter Rules| B
+        F -.->|Adapter Rules| D
     end
 
     subgraph "Background Service Worker"
         G[message-router] --> H[ai-service]
         G --> I[storage-manager]
         G --> J[prompt-templates]
-        H -->|OpenAI 协议| K[AI 后端]
+        H -->|OpenAI Protocol| K[AI Backend]
     end
 
     C -->|PREPARE_FILL| G
     C -->|EXECUTE_FILL| G
     A -->|EXTRACT_FORM| G
-    G -->|填充指令| C
+    G -->|Fill Commands| C
     C -->|fields| D
 ```
 
 ---
 
-## 🚀 安装与使用
+## 🚀 Installation & Usage
 
-### 环境要求
+### Requirements
 - **Node.js** >= 14
-- **Chrome 浏览器** >= 88（支持 Manifest V3）
+- **Chrome Browser** >= 88 (Manifest V3 support)
 
-### 安装步骤
+### Installation Steps
 
 ```bash
-# 1. 克隆项目
+# 1. Clone the project
 git clone <your-repo-url>
 cd form-helper
 
-# 2. 构建
+# 2. Build
 npm run build
 ```
 
-> 构建完成后会在 `dist/` 目录生成所有文件。
+> After building, all files will be generated in the `dist/` directory.
 
-### 加载到 Chrome
+### Load into Chrome
 
-1. 打开 Chrome，访问 `chrome://extensions/`
-2. 开启右上角「开发者模式」
-3. 点击「加载已解压的扩展程序」
-4. 选择项目的 `dist/` 目录
-5. 扩展图标出现在工具栏 🎉
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable "Developer mode" in the top right corner
+3. Click "Load unpacked"
+4. Select the project's `dist/` directory
+5. The extension icon appears in the toolbar 🎉
 
-### 基本配置
+### Basic Configuration
 
-1. 点击工具栏的扩展图标，打开 Popup 面板
-2. 在「⚙️ 设置」Tab 中：
-   - 选择一个**快捷预设**（通义千问 / DeepSeek / OpenAI / Ollama 本地）
-   - 填写你的 **API Key**
-   - 点击「💾 保存设置」
-3. 状态提示从 ⚠️ 变为 ✅ 即配置成功
+1. Click the extension icon in the toolbar to open the Popup panel
+2. In the "⚙️ Settings" tab:
+   - Select a **quick preset** (Qwen / DeepSeek / OpenAI / Ollama Local)
+   - Enter your **API Key**
+   - Click "💾 Save Settings"
+3. When the status changes from ⚠️ to ✅, configuration is complete
 
-### 使用方式
+### How to Use
 
-#### 自动填写
-1. 打开任意包含表单的网页
-2. 页面右下角会出现 📝 浮动按钮
-3. 点击按钮 → 弹出补充信息窗口
-4. 查看已有信息、预估 Token 消耗
-5. 可选输入补充内容（如「地址改成上海浦东」）
-6. 点击「🚀 确认填写」→ AI 分析 → 预览填充方案 → 确认填充
+#### Auto Fill
+1. Open any webpage with a form
+2. A 📝 floating button appears at the bottom right of the page
+3. Click the button → A supplementary info dialog appears
+4. Review existing info and estimated token consumption
+5. Optionally enter supplementary content (e.g., "change address to Shanghai Pudong")
+6. Click "🚀 Confirm Fill" → AI analysis → Preview fill plan → Confirm fill
 
-#### 自动提取
-- 开启「自动检测表单提交」后，插件会自动监听表单提交
-- 提交时弹窗确认是否保存数据到用户画像
-- 数据会自动结构化分类并积累到画像中
+#### Auto Extract
+- Enable "Auto-detect form submission" and the extension will automatically listen for form submissions
+- A confirmation dialog pops up on submission asking whether to save data to the user profile
+- Data is automatically structured, categorized, and accumulated into the profile
 
 ---
 
-## 🔧 开发指南
+## 🔧 Development Guide
 
-### 项目脚本
+### Scripts
 
 ```bash
-# 构建（输出到 dist/）
+# Build (output to dist/)
 npm run build
 
-# 监听模式（文件变化自动重新构建）
+# Watch mode (auto-rebuild on file changes)
 npm run dev
 ```
 
-### 构建说明
+### Build Details
 
-项目使用自定义的 `build.js` 构建脚本（无需 webpack/rollup 等构建工具）：
+The project uses a custom `build.js` build script (no webpack/rollup needed):
 
-- **Background**：将所有 ES Module 文件合并为单个 `background.js`
-- **Content Script**：将所有模块合并为 IIFE 格式的 `content.js`（因 Manifest V3 的 Content Script 不支持 ES Module）
-- **Popup**：直接复制 HTML/JS 文件
-- **图标**：自动生成占位图标（建议替换为真正的 PNG 图标）
+- **Background**: Merges all ES Module files into a single `background.js`
+- **Content Script**: Merges all modules into IIFE-format `content.js` (Manifest V3 Content Scripts don't support ES Modules)
+- **Popup**: Directly copies HTML/JS files
+- **Icons**: Auto-generates placeholder icons (recommended to replace with actual PNG icons)
 
-### 添加新的组件库适配器
+### Adding a New Component Library Adapter
 
-在 [component-adapters.js](/src/content/component-adapters.js) 中使用 `registerAdapter()` 注册：
+In [component-adapters.js](/src/content/component-adapters.js), use `registerAdapter()` to register:
 
 ```javascript
 registerAdapter({
   name: 'your-ui-lib',
 
-  // 该库的可交互输入元素选择器
+  // Interactive input element selectors for this library
   inputSelector: [
     '.your-input',
     '.your-select',
   ],
 
-  // 表单容器选择器（用于表单区域检测）
+  // Form container selectors (for form area detection)
   containerSelector: [
     '[class*="your-form" i]',
   ],
 
-  // Label 选择器
+  // Label selectors
   labelSelector: ['.your-form-label'],
 
-  // 类型推断规则：className 正则 → 类型
+  // Type inference rules: className regex → type
   typeRules: [
     { match: /your-select/i, type: 'select' },
     { match: /your-input/i, type: 'text' },
   ],
 
-  // 下拉搜索框选择器（应排除，避免误识别为表单字段）
+  // Dropdown search input selectors (should be excluded to avoid misidentification as form fields)
   searchInputSelector: [
     '.your-select-search-input',
   ],
 
-  // （可选）从自定义下拉中提取选项
+  // (Optional) Extract options from custom dropdowns
   optionExtractor(input) {
     const items = input.closest('.your-select')?.querySelectorAll('.option-item');
     if (!items) return null;
@@ -260,83 +259,83 @@ registerAdapter({
     }));
   },
 
-  // （可选）为自定义组件设置值
+  // (Optional) Set value for custom components
   valueSetter(input, value) {
-    // 返回 true=成功, false=失败, null=不处理（交给下一个适配器）
+    // Return true = success, false = failure, null = not handled (pass to next adapter)
     return null;
   },
 });
 ```
 
-### 消息通信协议
+### Messaging Protocol
 
-Content Script 与 Background 之间通过 `chrome.runtime.sendMessage` 通信，消息类型定义在 `MSG` 常量中：
+Content Script and Background communicate via `chrome.runtime.sendMessage`. Message types are defined in the `MSG` constant:
 
-| 消息类型 | 方向 | 说明 |
-|----------|------|------|
-| `EXTRACT_FORM` | Content → BG | 发送原始表单数据，AI 结构化提取 |
-| `SAVE_RECORD` | Content → BG | 保存表单记录并合并到画像 |
-| `PREPARE_FILL` | Content → BG | 获取画像 + 记忆，准备填写 |
-| `EXECUTE_FILL` | Content → BG | 发送 DOM + 补充信息，AI 生成填充指令 |
-| `GET_CONFIG` / `SAVE_CONFIG` | Popup → BG | 读写插件配置 |
-| `GET_PROFILE` / `SAVE_PROFILE` | Popup → BG | 读写用户画像 |
-| `SAVE_MEMORY` / `GET_MEMORIES` / `DELETE_MEMORY` | Content/BG | 记忆 CRUD |
+| Message Type | Direction | Description |
+|-------------|-----------|-------------|
+| `EXTRACT_FORM` | Content → BG | Send raw form data for AI structured extraction |
+| `SAVE_RECORD` | Content → BG | Save form record and merge into profile |
+| `PREPARE_FILL` | Content → BG | Get profile + memories, prepare for filling |
+| `EXECUTE_FILL` | Content → BG | Send DOM + supplementary info, AI generates fill commands |
+| `GET_CONFIG` / `SAVE_CONFIG` | Popup → BG | Read/write extension config |
+| `GET_PROFILE` / `SAVE_PROFILE` | Popup → BG | Read/write user profile |
+| `SAVE_MEMORY` / `GET_MEMORIES` / `DELETE_MEMORY` | Content/BG | Memory CRUD |
 
-### 存储结构
+### Storage Structure
 
-所有数据存储在 `chrome.storage.local` 中：
+All data is stored in `chrome.storage.local`:
 
-| Key | 说明 | 容量限制 |
-|-----|------|----------|
-| `user_config` | API 配置（endpoint、model、apiKey 等） | - |
-| `user_profile` | 用户画像（个人信息、联系方式、地址等） | 变更历史最多 50 条 |
-| `form_records` | 表单提交历史记录 | 最多 100 条 |
-| `user_memories` | AI 记忆条目 | 最多 200 条 |
-| `sdk_config` | SDK 外部接入配置 | - |
+| Key | Description | Capacity Limit |
+|-----|-------------|----------------|
+| `user_config` | API config (endpoint, model, apiKey, etc.) | - |
+| `user_profile` | User profile (personal info, contacts, addresses, etc.) | Max 50 change history entries |
+| `form_records` | Form submission history | Max 100 records |
+| `user_memories` | AI memory entries | Max 200 entries |
+| `sdk_config` | SDK external integration config | - |
 
-### Token 优化
+### Token Optimization
 
-为控制 AI 调用成本，项目做了以下优化：
-- **DOM 简化**：去除不可见元素、style 属性、无关属性，仅保留表单相关的最小 DOM 结构
-- **画像清洗**：发送给 AI 前剔除 `changeHistory`、`lastUpdated`、`id` 等无用字段
-- **Token 预估**：填充前展示预估 Token 消耗（DOM + 画像 + 记忆 + 模板），帮助用户判断成本
-
----
-
-## 📄 技术细节
-
-### 表单 DOM 简化流程
-
-```
-原始页面 DOM
-    ↓ 1. 检测表单区域（<form>、适配器容器选择器、区域检测算法）
-    ↓ 2. 过滤不可见元素（display:none、visibility:hidden、尺寸为0）
-    ↓ 3. 移除无关属性（保留 name/id/type/placeholder/value/role/class/data-id 等）
-    ↓ 4. 清理空白和注释节点
-简化 DOM HTML → 发送给 AI
-```
-
-### AI 填充流程
-
-```
-简化 DOM + 清洗画像 + 记忆 + 用户补充 + 页面上下文
-    ↓ buildFillPrompt() 组装 Prompt
-    ↓ callAIForJSON() 调用 AI
-AI 返回 { fields: [{selector, label, value, type}], updatedProfile, newMemories }
-    ↓ fillForm(fields) 执行填充
-    ↓ 根据 selector 定位元素 → setFieldValue() → triggerEvents()
-    ↓ 合并 updatedProfile 到画像、保存 newMemories
-```
+To control AI call costs, the project implements:
+- **DOM Simplification**: Removes invisible elements, style attributes, and irrelevant attributes — keeping only the minimal form-related DOM structure
+- **Profile Cleaning**: Strips `changeHistory`, `lastUpdated`, `id`, and other unnecessary fields before sending to AI
+- **Token Estimation**: Displays estimated token consumption before filling (DOM + Profile + Memories + Template) to help users assess cost
 
 ---
 
-## 🤝 贡献指南
+## � Technical Details
 
-1. Fork 本项目
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
-4. 推送分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+### Form DOM Simplification Flow
+
+```
+Original Page DOM
+    ↓ 1. Detect form areas (<form>, adapter container selectors, area detection algorithm)
+    ↓ 2. Filter invisible elements (display:none, visibility:hidden, zero dimensions)
+    ↓ 3. Remove irrelevant attributes (keep name/id/type/placeholder/value/role/class/data-id, etc.)
+    ↓ 4. Clean whitespace and comment nodes
+Simplified DOM HTML → Send to AI
+```
+
+### AI Fill Flow
+
+```
+Simplified DOM + Cleaned Profile + Memories + User Supplement + Page Context
+    ↓ buildFillPrompt() assembles Prompt
+    ↓ callAIForJSON() calls AI
+AI returns { fields: [{selector, label, value, type}], updatedProfile, newMemories }
+    ↓ fillForm(fields) executes fill
+    ↓ Locate elements by selector → setFieldValue() → triggerEvents()
+    ↓ Merge updatedProfile into profile, save newMemories
+```
+
+---
+
+## 🤝 Contributing
+
+1. Fork this project
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push the branch (`git push origin feature/amazing-feature`)
+5. Create a Pull Request
 
 ---
 

@@ -1,10 +1,10 @@
 
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 表单助手</title>
+  <title>AI Form Helper</title>
   <style>
     * {
       margin: 0;
@@ -301,41 +301,41 @@
   <div class="header">
     <span class="header-icon">🤖</span>
     <div>
-      <div class="header-title">AI 表单助手</div>
-      <div class="header-sub">智能提取 · 自动填写</div>
+      <div class="header-title">AI Form Helper</div>
+      <div class="header-sub">Smart Extract · Auto Fill</div>
     </div>
   </div>
 
   <!-- Tab 导航 -->
   <div class="tabs">
-    <div class="tab active" data-tab="settings">⚙️ 设置</div>
-    <div class="tab" data-tab="profile">👤 我的信息</div>
-    <div class="tab" data-tab="history">📋 历史</div>
-  </div>
+    <div class="tab active" data-tab="settings">⚙️ Settings</div>
+    <div class="tab" data-tab="profile">👤 Profile</div>
+    <div class="tab" data-tab="history">📋 History</div>
+    <div class="tab" data-tab="about">ℹ️ About</div>  </div>
 
-  <!-- 设置 Tab -->
+  <!-- Settings Tab -->
   <div id="tab-settings" class="tab-content active">
-    <div id="status-indicator" class="status status-warn">⚠️ 未配置 API Key</div>
+    <div id="status-indicator" class="status status-warn">⚠️ API Key not configured</div>
 
     <!-- 模型预设快捷选择 -->
     <div class="form-group">
-      <label class="form-label">🚀 快捷预设（点击自动填入地址和模型名）</label>
+      <label class="form-label">🚀 Quick Presets (click to auto-fill endpoint and model)</label>
       <div class="preset-btns">
-        <button class="preset-btn" data-endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1" data-model="qwen-plus" data-placeholder="sk-...">通义千问</button>
+        <button class="preset-btn" data-endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1" data-model="qwen-plus" data-placeholder="sk-...">Qwen</button>
         <button class="preset-btn" data-endpoint="https://api.deepseek.com/v1" data-model="deepseek-chat" data-placeholder="sk-...">DeepSeek</button>
         <button class="preset-btn" data-endpoint="https://api.openai.com/v1" data-model="gpt-4o-mini" data-placeholder="sk-...">OpenAI</button>
-        <button class="preset-btn" data-endpoint="http://localhost:11434/v1" data-model="qwen2.5:7b" data-placeholder="ollama">Ollama本地</button>
+        <button class="preset-btn" data-endpoint="http://localhost:11434/v1" data-model="qwen2.5:7b" data-placeholder="ollama">Ollama Local</button>
       </div>
     </div>
 
     <div class="form-group">
-      <label class="form-label">API 地址</label>
+      <label class="form-label">API Endpoint</label>
       <input id="apiEndpoint" class="form-input" type="url" placeholder="https://api.openai.com/v1">
-      <div class="form-hint">支持 OpenAI 兼容协议的任何服务（如 通义千问、DeepSeek、本地 Ollama 等）</div>
+      <div class="form-hint">Any service compatible with the OpenAI protocol (e.g., Qwen, DeepSeek, Ollama, etc.)</div>
     </div>
 
     <div class="form-group">
-      <label class="form-label">模型名称</label>
+      <label class="form-label">Model Name</label>
       <input id="modelName" class="form-input" type="text" placeholder="gpt-4o-mini">
     </div>
 
@@ -345,7 +345,7 @@
     </div>
 
     <div class="switch-row">
-      <span class="switch-label">自动检测表单提交</span>
+      <span class="switch-label">Auto-detect form submission</span>
       <label class="switch">
         <input id="autoDetect" type="checkbox" checked>
         <span class="slider"></span>
@@ -353,26 +353,71 @@
     </div>
 
     <div class="form-group" style="margin-top:10px">
-      <label class="form-label">域名白名单（留空=全部网站生效）</label>
+      <label class="form-label">Domain Whitelist (leave empty = all websites)</label>
       <input id="enabledDomains" class="form-input" type="text" placeholder="example.com, test.com">
-      <div class="form-hint">多个域名用英文逗号分隔</div>
+      <div class="form-hint">Separate multiple domains with commas</div>
     </div>
 
-    <button id="saveConfigBtn" class="btn btn-primary">💾 保存设置</button>
-    <button id="clearAllBtn" class="btn btn-danger">🗑️ 清空所有数据</button>
+    <button id="saveConfigBtn" class="btn btn-primary">💾 Save Settings</button>
+    <button id="clearAllBtn" class="btn btn-danger">🗑️ Clear All Data</button>
   </div>
 
-  <!-- 我的信息 Tab -->
+  <!-- Profile Tab -->
   <div id="tab-profile" class="tab-content">
     <div id="profile-container">
-      <div class="empty-state">暂无信息，提交表单后将自动积累</div>
+      <div class="empty-state">No data yet. Submit a form to start accumulating.</div>
     </div>
   </div>
 
-  <!-- 历史记录 Tab -->
+  <!-- History Tab -->
   <div id="tab-history" class="tab-content">
     <div id="history-container">
-      <div class="empty-state">暂无历史记录</div>
+      <div class="empty-state">No history records</div>
+    </div>
+  </div>
+
+  <!-- About Tab -->
+  <div id="tab-about" class="tab-content">
+    <div style="text-align:center; padding:20px 10px;">
+      <div style="font-size:48px; margin-bottom:8px;">🤖</div>
+      <div style="font-size:18px; font-weight:700; color:#333;">AI Form Helper</div>
+      <div style="font-size:12px; color:#999; margin-top:4px;">v1.0.0</div>
+      <div style="font-size:13px; color:#666; margin-top:16px; line-height:1.6;">
+        An AI-powered Chrome extension for intelligent form data extraction and auto-filling.
+      </div>
+    </div>
+
+    <div style="background:#fff; border-radius:8px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;">✨ Features</div>
+      <ul style="font-size:12px; color:#555; line-height:1.8; padding-left:18px; margin:0;">
+        <li><b>Smart Fill</b> — AI analyzes DOM to auto-fill forms with profile data & memories</li>
+        <li><b>Data Extraction</b> — Captures form submissions and builds structured user profiles</li>
+        <li><b>Memory System</b> — Remembers preferences, plans, and facts across sessions</li>
+        <li><b>Component Libraries</b> — Supports Ant Design, Element UI, TDesign, MUI, and more</li>
+        <li><b>Multi-Backend</b> — Works with Qwen, DeepSeek, OpenAI, Ollama, and any OpenAI-compatible API</li>
+      </ul>
+    </div>
+
+    <div style="background:#fff; border-radius:8px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;">📦 Tech Stack</div>
+      <div style="font-size:12px; color:#555; line-height:1.8;">
+        <div>• Chrome Extension Manifest V3</div>
+        <div>• Vanilla JavaScript (no framework dependency)</div>
+        <div>• OpenAI-compatible Chat Completions API</div>
+        <div>• Pluggable component adapter architecture</div>
+      </div>
+    </div>
+
+    <div style="background:#fff; border-radius:8px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;">🔗 Links</div>
+      <div style="font-size:12px; color:#555; line-height:2;">
+        <div>📄 <a href="#" id="about-readme-link" style="color:#667eea; text-decoration:none;">View README on GitHub</a></div>
+        <div>🐛 <a href="#" id="about-issues-link" style="color:#667eea; text-decoration:none;">Report an Issue</a></div>
+      </div>
+    </div>
+
+    <div style="text-align:center; font-size:11px; color:#bbb; margin-top:16px;">
+      Made with ❤️ · MIT License · © 2024-2026
     </div>
   </div>
 
