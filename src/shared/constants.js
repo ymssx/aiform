@@ -18,6 +18,8 @@ export const MSG = {
   SAVE_CONFIG: 'SAVE_CONFIG',
   // 获取用户画像
   GET_PROFILE: 'GET_PROFILE',
+  // 保存用户画像
+  SAVE_PROFILE: 'SAVE_PROFILE',
   // 获取历史记录列表
   GET_RECORDS: 'GET_RECORDS',
   // 删除记录

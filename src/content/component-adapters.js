@@ -316,13 +316,25 @@ registerAdapter({
 // --- TDesign ---
 registerAdapter({
   name: 'tdesign',
-  inputSelector: ['.t-input', '.t-select', '.t-date-picker'],
+  inputSelector: [
+    // TDesign 的 .t-input 是包装 div，内部有原生 input.t-input__inner
+    // 所以不要匹配 .t-input（否则和内部原生 input 重复），只匹配内部真正的输入元素
+    // 但 .t-select 没有内部原生 select，需要单独匹配
+    '.t-select',
+    '.t-date-picker',
+    '.t-textarea__inner',
+  ],
   containerSelector: ['[class*="t-form" i]', '[class*="t-dialog" i]'],
   labelSelector: ['.t-form__label'],
   typeRules: [
     { match: /t-select/i, type: 'select' },
     { match: /t-date/i, type: 'date' },
-    { match: /t-input/i, type: 'text' },
+    { match: /t-textarea/i, type: 'textarea' },
+  ],
+  searchInputSelector: [
+    // TDesign select 下拉搜索框
+    '.t-select__input-filter',
+    '.t-input__inner[readonly]',
   ],
 });
 

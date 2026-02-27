@@ -8,7 +8,7 @@ import { callAIForJSON } from './ai-service.js';
 import { buildExtractPrompt, buildFillPrompt, buildMemoryExtractPrompt } from './prompt-templates.js';
 import {
   getConfig, saveConfig,
-  getProfile, mergeProfile,
+  getProfile, saveProfile, mergeProfile,
   getRecords, saveRecord, deleteRecord, clearAll,
   getMemories, saveMemory, saveMemories, deleteMemory,
   getSDKConfig, saveSDKConfig,
@@ -63,13 +63,13 @@ async function handleMessage(message, sender) {
       return { success: true, data: { profile, memories } };
     }
 
-    // ========== 执行 AI 融合填充（增强：含记忆）==========
+    // ========== 执行 AI 融合填充（DOM 分析版）==========
     case MSG.EXECUTE_FILL: {
-      const { formSchema, userSupplement, pageContext, domain } = data;
+      const { simplifiedDOM, userSupplement, pageContext, domain } = data;
       const profile = await getProfile();
       const memories = await getMemories(domain || '*');
 
-      const prompt = buildFillPrompt(formSchema, profile, memories, userSupplement, pageContext);
+      const prompt = buildFillPrompt(simplifiedDOM, profile, memories, userSupplement, pageContext);
       const result = await callAIForJSON(prompt);
 
       // 更新用户画像
@@ -135,6 +135,11 @@ async function handleMessage(message, sender) {
     case MSG.GET_PROFILE: {
       const profile = await getProfile();
       return { success: true, data: profile };
+    }
+
+    case MSG.SAVE_PROFILE: {
+      await saveProfile(data);
+      return { success: true };
     }
 
     // ========== 记录管理 ==========

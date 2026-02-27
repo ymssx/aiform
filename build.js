@@ -126,7 +126,6 @@ function buildContentScript() {
   const files = [
     'shared/constants.js',
     'shared/utils.js',
-    'content/component-adapters.js',
     'content/form-extractor.js',
     'content/form-observer.js',
     'content/form-filler.js',

@@ -3,7 +3,7 @@
 // 自动填写按钮 + 补充输入弹窗
 // ============================================
 
-import { extractFormSchema, extractFormSchemaWithRetry } from '../form-extractor.js';
+import { extractSimplifiedFormDOMWithRetry, hasFormOnPage } from '../form-extractor.js';
 import { fillForm } from '../form-filler.js';
 import { sendMessage } from '../../shared/utils.js';
 import { MSG } from '../../shared/constants.js';
@@ -61,10 +61,10 @@ export function createAutoFillButton() {
  */
 async function handleAutoFillClick() {
   try {
-    // 1. 采集当前表单结构（带重试，支持 SPA 动态渲染）
+    // 1. 提取简化的表单 DOM HTML（带重试，支持 SPA 动态渲染）
     showToast('正在检测表单...', 'info');
-    const formSchema = await extractFormSchemaWithRetry(2000);
-    if (formSchema.length === 0) {
+    const simplifiedDOM = await extractSimplifiedFormDOMWithRetry(2000);
+    if (!simplifiedDOM || simplifiedDOM.trim().length < 50) {
       showToast('当前页面未检测到表单，请确认页面上有可填写的输入框', 'warning');
       return;
     }
@@ -82,8 +82,8 @@ async function handleAutoFillClick() {
 
     const { profile, memories } = result.data;
 
-    // 3. 弹出补充输入弹窗（展示记忆信息）
-    const supplement = await showSupplementDialog(profile, formSchema, memories || []);
+    // 3. 弹出补充输入弹窗（展示记忆信息和简化DOM概览）
+    const supplement = await showSupplementDialog(profile, simplifiedDOM, memories || []);
     if (supplement === null) return; // 用户取消
 
     // 4. 显示 Loading 状态
@@ -91,9 +91,9 @@ async function handleAutoFillClick() {
 
     let fillResult;
     try {
-      // 5. 调用 AI 融合填充（传入记忆和页面上下文）
+      // 5. 调用 AI 分析 DOM 并生成填充指令
       fillResult = await sendMessage(MSG.EXECUTE_FILL, {
-        formSchema,
+        simplifiedDOM,
         userSupplement: supplement,
         pageContext,
         domain,
@@ -108,15 +108,21 @@ async function handleAutoFillClick() {
       return;
     }
 
+    const aiFields = fillResult.data.fields || [];
+    if (aiFields.length === 0) {
+      showToast('AI 未识别到需要填充的字段', 'warning');
+      return;
+    }
+
     // 6. 展示 AI 输出结果气泡，等用户确认后执行填充
-    const confirmed = await showAIResultBubble(fillResult.data.fillData, formSchema);
+    const confirmed = await showAIResultBubble(aiFields);
     if (!confirmed) {
       showToast('已取消填充', 'info');
       return;
     }
 
-    // 7. 执行填充（传入 formSchema 以便通过 _locator 定位无 name/id 的元素）
-    const count = fillForm(fillResult.data.fillData, formSchema);
+    // 7. 执行填充
+    const count = await fillForm(aiFields);
     showToast(`✅ 已成功填充 ${count} 个字段`, 'success');
 
   } catch (err) {
@@ -127,9 +133,12 @@ async function handleAutoFillClick() {
 
 /**
  * 显示补充输入弹窗
+ * @param {Object} profile - 用户画像
+ * @param {string} simplifiedDOM - 简化后的 DOM HTML
+ * @param {Array} memories - 记忆条目
  * @returns {Promise<string|null>} 用户输入的补充内容，null 表示取消
  */
-function showSupplementDialog(profile, formSchema, memories) {
+function showSupplementDialog(profile, simplifiedDOM, memories) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
@@ -260,49 +269,64 @@ function showSupplementDialog(profile, formSchema, memories) {
       dialog.appendChild(memSection);
     }
 
-    // 字段匹配状态
-    const fieldStatus = document.createElement('div');
-    Object.assign(fieldStatus.style, {
+    // 表单检测概览（替代旧的字段匹配状态）
+    const domPreview = document.createElement('div');
+    Object.assign(domPreview.style, {
       padding: '10px 20px',
       borderBottom: '1px solid #eee',
     });
-    const statusTitle = document.createElement('div');
-    Object.assign(statusTitle.style, {
+    const previewTitle = document.createElement('div');
+    Object.assign(previewTitle.style, {
       fontSize: '13px',
       fontWeight: '600',
       color: '#333',
       marginBottom: '6px',
     });
-    statusTitle.textContent = '⚡ 当前表单需要的字段';
-    fieldStatus.appendChild(statusTitle);
+    previewTitle.textContent = '⚡ 检测到的表单区域';
+    domPreview.appendChild(previewTitle);
 
-    const statusGrid = document.createElement('div');
-    Object.assign(statusGrid.style, {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: '6px',
+    const previewInfo = document.createElement('div');
+    Object.assign(previewInfo.style, {
       fontSize: '12px',
+      color: '#666',
+      lineHeight: '1.6',
+      padding: '8px 12px',
+      background: '#f8f9ff',
+      borderRadius: '6px',
+      maxHeight: '80px',
+      overflowY: 'auto',
     });
 
-    const profileValues = flattenProfile(profile);
-    formSchema.forEach(field => {
-      const tag = document.createElement('span');
-      const hasData = profileValues.some(p =>
-        field.label.includes(p.label) || p.label.includes(field.label) ||
-        field.name.toLowerCase().includes(p.key) || p.key.includes(field.name.toLowerCase())
-      );
-      Object.assign(tag.style, {
-        padding: '2px 8px',
-        borderRadius: '4px',
-        background: hasData ? '#e8f5e9' : '#fff3e0',
-        color: hasData ? '#2e7d32' : '#e65100',
-        border: `1px solid ${hasData ? '#c8e6c9' : '#ffe0b2'}`,
-      });
-      tag.textContent = `${hasData ? '✅' : '⚠️'} ${field.label || field.name}`;
-      statusGrid.appendChild(tag);
-    });
-    fieldStatus.appendChild(statusGrid);
-    dialog.appendChild(fieldStatus);
+    // 从简化 DOM 中快速统计表单元素数量
+    const inputCount = (simplifiedDOM.match(/<input/g) || []).length;
+    const selectCount = (simplifiedDOM.match(/<select/g) || []).length + (simplifiedDOM.match(/role="combobox"/g) || []).length;
+    const textareaCount = (simplifiedDOM.match(/<textarea/g) || []).length;
+    const totalFields = inputCount + selectCount + textareaCount;
+
+    // 估算 token 消耗（粗略：1 token ≈ 4 字符英文 / 1.5 字符中文）
+    const domTokens = estimateTokens(simplifiedDOM);
+    const profileTokens = estimateTokens(JSON.stringify(profile || {}, null, 2));
+    const memoriesTokens = estimateTokens(memories.map(m => m.content).join(' '));
+    const promptBaseTokens = 1200; // prompt 模板本身的固定开销
+    const totalEstTokens = domTokens + profileTokens + memoriesTokens + promptBaseTokens;
+
+    previewInfo.innerHTML = `
+      <div>📝 检测到 <strong>${totalFields}</strong> 个表单字段</div>
+      <div style="margin-top:4px;color:#999">
+        ${inputCount > 0 ? `输入框 ${inputCount} 个` : ''}
+        ${selectCount > 0 ? `${inputCount > 0 ? ' · ' : ''}下拉框 ${selectCount} 个` : ''}
+        ${textareaCount > 0 ? `${(inputCount + selectCount) > 0 ? ' · ' : ''}文本域 ${textareaCount} 个` : ''}
+      </div>
+      <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e0e0e0;display:flex;align-items:center;gap:6px">
+        <span style="color:#888">🔢 预计消耗 Token：</span>
+        <strong style="color:${totalEstTokens > 10000 ? '#e53935' : totalEstTokens > 5000 ? '#ff9800' : '#4caf50'}">${totalEstTokens.toLocaleString()}</strong>
+        <span style="color:#bbb;font-size:11px">(DOM ${domTokens.toLocaleString()} + 画像 ${profileTokens.toLocaleString()} + 记忆 ${memoriesTokens.toLocaleString()} + 模板 ${promptBaseTokens.toLocaleString()})</span>
+      </div>
+      ${totalEstTokens > 10000 ? '<div style="margin-top:4px;color:#e53935;font-size:11px">⚠️ Token 较多，可能产生较高费用，建议检查页面是否包含过多内容</div>' : ''}
+      <div style="margin-top:4px;color:#999">AI 将直接分析表单 DOM 结构来识别字段含义</div>
+    `;
+    domPreview.appendChild(previewInfo);
+    dialog.appendChild(domPreview);
 
     // 补充输入区域
     const inputSection = document.createElement('div');
@@ -336,7 +360,7 @@ function showSupplementDialog(profile, formSchema, memories) {
       userSelect: 'none',
       transition: 'all 0.2s',
     });
-    let aiGenerateEnabled = true; // 默认开启
+    let aiGenerateEnabled = true;
     const toggleCheckbox = document.createElement('div');
     Object.assign(toggleCheckbox.style, {
       width: '36px',
@@ -436,7 +460,6 @@ function showSupplementDialog(profile, formSchema, memories) {
     confirmBtn.addEventListener('click', () => {
       overlay.remove();
       let supplement = textarea.value.trim();
-      // 如果开启了智能生成模式，在补充信息中加入标记
       if (aiGenerateEnabled) {
         supplement = '[AI_GENERATE] ' + supplement;
       }
@@ -450,7 +473,6 @@ function showSupplementDialog(profile, formSchema, memories) {
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
 
-    // 自动聚焦输入框
     setTimeout(() => textarea.focus(), 100);
   });
 }
@@ -594,11 +616,10 @@ function showLoadingOverlay() {
 
 /**
  * 展示 AI 输出结果气泡
- * @param {Object} fillData - AI 返回的填充数据 { fieldName: value }
- * @param {Array} formSchema - 表单字段 schema
+ * @param {Array} fields - AI 返回的填充指令 [{ selector, label, value, type, options }]
  * @returns {Promise<boolean>} 用户是否确认填充
  */
-function showAIResultBubble(fillData, formSchema) {
+function showAIResultBubble(fields) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
@@ -627,7 +648,7 @@ function showAIResultBubble(fillData, formSchema) {
       flexDirection: 'column',
     });
 
-    // 头部 - AI 气泡风格
+    // 头部
     const header = document.createElement('div');
     Object.assign(header.style, {
       padding: '16px 20px',
@@ -646,7 +667,7 @@ function showAIResultBubble(fillData, formSchema) {
     `;
     bubble.appendChild(header);
 
-    // 内容区域 - 字段列表
+    // 内容区域
     const content = document.createElement('div');
     Object.assign(content.style, {
       padding: '16px 20px',
@@ -655,17 +676,11 @@ function showAIResultBubble(fillData, formSchema) {
       maxHeight: '50vh',
     });
 
-    // 构建 name -> label 的映射
-    const nameToLabel = {};
-    formSchema.forEach(f => {
-      nameToLabel[f.name] = f.label || f.name;
-    });
+    const filledFields = fields.filter(f => f.value !== null && f.value !== undefined);
+    const skippedFields = fields.filter(f => f.value === null || f.value === undefined);
 
-    const entries = Object.entries(fillData).filter(([, v]) => v !== null && v !== undefined);
-    const nullEntries = Object.entries(fillData).filter(([, v]) => v === null || v === undefined);
-
-    if (entries.length > 0) {
-      entries.forEach(([name, value], idx) => {
+    if (filledFields.length > 0) {
+      filledFields.forEach((field, idx) => {
         const row = document.createElement('div');
         Object.assign(row.style, {
           display: 'flex',
@@ -686,7 +701,7 @@ function showAIResultBubble(fillData, formSchema) {
           paddingTop: '2px',
           flexShrink: '0',
         });
-        label.textContent = nameToLabel[name] || name;
+        label.textContent = field.label || field.selector || '未知字段';
 
         const val = document.createElement('div');
         Object.assign(val.style, {
@@ -700,7 +715,7 @@ function showAIResultBubble(fillData, formSchema) {
           borderRadius: '4px',
           border: '1px solid #c8e6c9',
         });
-        val.textContent = String(value);
+        val.textContent = String(field.value);
 
         row.appendChild(label);
         row.appendChild(val);
@@ -708,8 +723,8 @@ function showAIResultBubble(fillData, formSchema) {
       });
     }
 
-    // 如果有未填充的字段，也展示出来
-    if (nullEntries.length > 0) {
+    // 未填充的字段
+    if (skippedFields.length > 0) {
       const divider = document.createElement('div');
       Object.assign(divider.style, {
         fontSize: '12px',
@@ -721,7 +736,7 @@ function showAIResultBubble(fillData, formSchema) {
       divider.textContent = '⚠️ 以下字段未能填充';
       content.appendChild(divider);
 
-      nullEntries.forEach(([name]) => {
+      skippedFields.forEach(field => {
         const row = document.createElement('div');
         Object.assign(row.style, {
           display: 'flex',
@@ -731,7 +746,7 @@ function showAIResultBubble(fillData, formSchema) {
           fontSize: '12px',
           color: '#999',
         });
-        row.textContent = `${nameToLabel[name] || name}: 未填充`;
+        row.textContent = `${field.label || field.selector}: 未填充`;
         content.appendChild(row);
       });
     }
@@ -753,7 +768,7 @@ function showAIResultBubble(fillData, formSchema) {
       fontSize: '12px',
       color: '#888',
     });
-    stats.textContent = `共 ${entries.length + nullEntries.length} 个字段，将填充 ${entries.length} 个`;
+    stats.textContent = `共 ${fields.length} 个字段，将填充 ${filledFields.length} 个`;
 
     const btnGroup = document.createElement('div');
     Object.assign(btnGroup.style, {
@@ -803,6 +818,21 @@ function showAIResultBubble(fillData, formSchema) {
     overlay.appendChild(bubble);
     document.body.appendChild(overlay);
   });
+}
+
+/**
+ * 粗略估算文本的 Token 数量
+ * 规则：英文约 4 字符 / token，中文约 1.5 字符 / token
+ * @param {string} text
+ * @returns {number}
+ */
+function estimateTokens(text) {
+  if (!text) return 0;
+  // 分离中文和非中文部分
+  const chineseChars = (text.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) || []).length;
+  const otherChars = text.length - chineseChars;
+  // 中文 ~1.5字符/token, 英文/符号 ~4字符/token
+  return Math.ceil(chineseChars / 1.5 + otherChars / 4);
 }
 
 /**
