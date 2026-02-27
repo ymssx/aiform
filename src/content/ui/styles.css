@@ -1,0 +1,16 @@
+
+/* ============================================
+   AI 表单助手 - Content Script UI 样式
+   使用 Shadow DOM 隔离，此处定义宿主样式
+   ============================================ */
+
+/* Shadow DOM 宿主容器 */
+#form-helper-root {
+  all: initial;
+  position: fixed;
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+}

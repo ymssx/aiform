@@ -1,0 +1,232 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 表单助手 - 测试页面</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 8px;
+      font-size: 24px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #999;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .form-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 30px;
+      margin-bottom: 20px;
+    }
+    .form-card h2 {
+      font-size: 18px;
+      color: #333;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #667eea;
+    }
+    .field {
+      margin-bottom: 16px;
+    }
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 4px;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: #667eea;
+    }
+    .field textarea { min-height: 60px; resize: vertical; }
+    .field-row {
+      display: flex;
+      gap: 12px;
+    }
+    .field-row .field { flex: 1; }
+    .submit-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      margin-top: 20px;
+    }
+    .submit-btn:hover { opacity: 0.9; }
+    .tips {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .tips h3 { font-size: 14px; color: #667eea; margin-bottom: 10px; }
+    .tips ol { padding-left: 20px; color: #666; font-size: 13px; line-height: 2; }
+    .tips code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🤖 AI 表单助手 - 测试页面</h1>
+    <p class="subtitle">在此页面测试表单提交检测与自动填写功能</p>
+
+    <!-- 测试表单 1：用户注册 -->
+    <div class="form-card">
+      <h2>📋 用户注册表单</h2>
+      <form id="registerForm">
+        <div class="field-row">
+          <div class="field">
+            <label for="name">姓名</label>
+            <input type="text" id="name" name="name" placeholder="请输入您的姓名">
+          </div>
+          <div class="field">
+            <label for="gender">性别</label>
+            <select id="gender" name="gender">
+              <option value="">请选择</option>
+              <option value="male">男</option>
+              <option value="female">女</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="phone">手机号</label>
+            <input type="tel" id="phone" name="phone" placeholder="请输入手机号">
+          </div>
+          <div class="field">
+            <label for="email">邮箱</label>
+            <input type="email" id="email" name="email" placeholder="请输入邮箱">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="birthday">出生日期</label>
+          <input type="date" id="birthday" name="birthday">
+        </div>
+
+        <div class="field">
+          <label for="company">公司名称</label>
+          <input type="text" id="company" name="company" placeholder="请输入公司名称">
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="position">职位</label>
+            <input type="text" id="position" name="position" placeholder="请输入职位">
+          </div>
+          <div class="field">
+            <label for="department">部门</label>
+            <input type="text" id="department" name="department" placeholder="请输入部门">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="address">详细地址</label>
+          <textarea id="address" name="address" placeholder="请输入详细地址"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="zipcode">邮编</label>
+          <input type="text" id="zipcode" name="zipcode" placeholder="请输入邮编">
+        </div>
+
+        <button type="submit" class="submit-btn">📤 提交注册</button>
+      </form>
+    </div>
+
+    <!-- 测试表单 2：简单联系表单（测试自动填写） -->
+    <div class="form-card">
+      <h2>📬 联系我们</h2>
+      <form id="contactForm">
+        <div class="field">
+          <label for="contact_name">您的姓名</label>
+          <input type="text" id="contact_name" name="contact_name" placeholder="您的姓名">
+        </div>
+        <div class="field">
+          <label for="contact_email">电子邮件</label>
+          <input type="email" id="contact_email" name="contact_email" placeholder="您的邮箱">
+        </div>
+        <div class="field">
+          <label for="contact_phone">联系电话</label>
+          <input type="tel" id="contact_phone" name="contact_phone" placeholder="您的电话">
+        </div>
+        <div class="field">
+          <label for="subject">主题</label>
+          <select id="subject" name="subject">
+            <option value="">请选择主题</option>
+            <option value="consult">产品咨询</option>
+            <option value="support">技术支持</option>
+            <option value="feedback">意见反馈</option>
+            <option value="cooperation">商务合作</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="message">留言内容</label>
+          <textarea id="message" name="message" placeholder="请输入您的留言"></textarea>
+        </div>
+        <button type="submit" class="submit-btn">📤 发送消息</button>
+      </form>
+    </div>
+
+    <!-- 使用说明 -->
+    <div class="tips">
+      <h3>🔧 使用说明</h3>
+      <ol>
+        <li>先在浏览器中加载插件：打开 <code>chrome://extensions</code>，开启开发者模式，加载 <code>dist</code> 目录</li>
+        <li>点击插件图标，在 <strong>设置</strong> 页面配置你的 AI 模型地址和 API Key</li>
+        <li>在上方表单中填写信息并点击 <strong>提交</strong>，观察插件是否弹出确认保存弹窗</li>
+        <li>确认保存后，刷新页面，点击右下角 <strong>📝 浮动按钮</strong> 测试自动填写功能</li>
+        <li>在自动填写弹窗中，可以输入补充信息，AI 会融合历史数据智能填充</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    // 阻止表单实际提交（测试用）
+    document.querySelectorAll('form').forEach(form => {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        console.log('表单提交（已阻止实际提交）:', form.id);
+        alert('表单已提交（测试模式，未实际发送）。\n\n请检查插件是否弹出了确认保存弹窗。');
+      });
+    });
+  </script>
+</body>
+</html>

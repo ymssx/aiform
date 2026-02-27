@@ -1,0 +1,11 @@
+
+{
+  "name": "form-helper",
+  "version": "1.0.0",
+  "description": "AI 驱动的智能表单数据提取与自动填写浏览器插件",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node build.js --watch"
+  },
+  "devDependencies": {}
+}
