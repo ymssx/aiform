@@ -336,6 +336,17 @@ registerAdapter({
   ],
 });
 
+// --- mod-form 自定义表单框架 ---
+registerAdapter({
+  name: 'mod-form',
+  inputSelector: [],
+  containerSelector: [
+    '[class*="mod-form" i]',
+  ],
+  labelSelector: ['.mod-form__label'],
+  typeRules: [],
+});
+
 // --- WG 自定义组件库 ---
 registerAdapter({
   name: 'wg-components',

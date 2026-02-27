@@ -741,13 +741,21 @@ function findLabel(input) {
   }
 
   // 7. 向上多层查找（最多 6 层祖先）
+  // 关键：找到的 label 必须是当前 input "最近的" label，
+  // 即 label 和 input 在同一个表单项容器内，而不是其他字段的 label
   let ancestor = parent;
   for (let i = 0; i < 6 && ancestor && ancestor !== document.body; i++) {
     try {
       const labelEl = ancestor.querySelector(labelSelectorStr);
       if (labelEl && labelEl !== input && !labelEl.contains(input)) {
-        const text = cleanLabelText(labelEl.textContent);
-        if (text && text.length < 40) return text;
+        // 验证：ancestor 内的第一个输入元素应该就是当前 input（或包含当前 input）
+        // 这确保我们不会在一个包含多个表单项的大容器中，把第一个字段的 label 错配给后面的字段
+        const firstInput = ancestor.querySelector(INPUT_SELECTOR);
+        const belongsToThis = !firstInput || firstInput === input || input.contains(firstInput) || firstInput.contains(input);
+        if (belongsToThis) {
+          const text = cleanLabelText(labelEl.textContent);
+          if (text && text.length < 40) return text;
+        }
       }
     } catch (e) { /* ignore */ }
     ancestor = ancestor.parentElement;
