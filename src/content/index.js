@@ -18,14 +18,14 @@ const DEBOUNCE_MS = 3000;
  * 获取页面上下文信息（传给 AI 减少歧义）
  */
 function getPageContext() {
-  return `标题: ${document.title}\nURL: ${location.href}\n域名: ${location.hostname}`;
+  return `Title: ${document.title}\nURL: ${location.href}\nDomain: ${location.hostname}`;
 }
 
 /**
  * 初始化插件
  */
 async function init() {
-  console.log('[FormHelper] Content Script 初始化...');
+  console.log('[FormHelper] Content Script initializing...');
 
   // 始终创建浮动按钮（不依赖 background 通信）
   createAutoFillButton();
@@ -34,7 +34,7 @@ async function init() {
     // 检查配置
     const configResult = await sendMessage(MSG.GET_CONFIG);
     if (!configResult || !configResult.success) {
-      console.warn('[FormHelper] 获取配置失败，使用默认行为');
+      console.warn('[FormHelper] Failed to get config, using default behavior');
       initFormObserver(handleFormSubmit);
       return;
     }
@@ -45,7 +45,7 @@ async function init() {
     if (config.enabledDomains && config.enabledDomains.length > 0) {
       const domain = getCurrentDomain();
       if (!config.enabledDomains.some(d => domain.includes(d))) {
-        console.log('[FormHelper] 当前域名不在白名单中，跳过表单监听');
+      console.log('[FormHelper] Current domain not in whitelist, skipping form listener');
         return;
       }
     }
@@ -55,11 +55,11 @@ async function init() {
       initFormObserver(handleFormSubmit);
     }
   } catch (err) {
-    console.error('[FormHelper] 初始化出错:', err);
+    console.error('[FormHelper] Initialization error:', err);
     initFormObserver(handleFormSubmit);
   }
 
-  console.log('[FormHelper] 初始化完成');
+  console.log('[FormHelper] Initialization complete');
 }
 
 /**
@@ -73,18 +73,18 @@ async function handleFormSubmit(rawFields, formElement) {
 
   if (rawFields.length === 0) return;
 
-  console.log('[FormHelper] 检测到表单提交，字段数:', rawFields.length);
+  console.log('[FormHelper] Form submission detected, field count:', rawFields.length);
 
   try {
     // 检查是否配置了 API Key
     const configResult = await sendMessage(MSG.GET_CONFIG);
     if (!configResult.data.apiKey) {
-      showToast('请先在插件设置中配置 API Key', 'warning');
+      showToast('Please configure API Key in extension settings first', 'warning');
       return;
     }
 
     // 调用 AI 结构化提取（传入页面上下文）
-    showToast('AI 正在分析表单数据...', 'info');
+    showToast('AI is analyzing form data...', 'info');
 
     const extractResult = await sendMessage(MSG.EXTRACT_FORM, {
       rawFields,
@@ -93,7 +93,7 @@ async function handleFormSubmit(rawFields, formElement) {
     });
 
     if (!extractResult.success) {
-      showToast('AI 分析失败: ' + extractResult.error, 'error');
+      showToast('AI analysis failed: ' + extractResult.error, 'error');
       return;
     }
 
@@ -118,14 +118,14 @@ async function handleFormSubmit(rawFields, formElement) {
       if (saveResult.success) {
         // 显示记忆提取结果
         const memCount = structuredData.memories?.length || 0;
-        showToast(`✅ 表单信息已保存${memCount > 0 ? `，提取了 ${memCount} 条记忆` : ''}`, 'success');
+        showToast(`✅ Form data saved${memCount > 0 ? `, extracted ${memCount} memories` : ''}`, 'success');
       } else {
-        showToast('保存失败: ' + saveResult.error, 'error');
+        showToast('Save failed: ' + saveResult.error, 'error');
       }
     }
   } catch (err) {
-    console.error('[FormHelper] 处理表单提交出错:', err);
-    showToast('处理出错: ' + err.message, 'error');
+    console.error('[FormHelper] Form submission processing error:', err);
+    showToast('Processing error: ' + err.message, 'error');
   }
 }
 

@@ -144,21 +144,21 @@ function setupDrag(el) {
 async function handleAutoFillClick() {
   try {
     // 1. 提取简化的表单 DOM HTML（带重试，支持 SPA 动态渲染）
-    showToast('正在检测表单...', 'info');
+    showToast('Detecting form...', 'info');
     const simplifiedDOM = await extractSimplifiedFormDOMWithRetry(2000);
     if (!simplifiedDOM || simplifiedDOM.trim().length < 50) {
-      showToast('当前页面未检测到表单，请确认页面上有可填写的输入框', 'warning');
+      showToast('No form detected on this page. Please ensure there are fillable input fields.', 'warning');
       return;
     }
 
     // 2. 获取历史用户画像和记忆
     const ctx = window.__formHelperContext || {};
     const domain = ctx.getCurrentDomain ? ctx.getCurrentDomain() : location.hostname;
-    const pageContext = ctx.getPageContext ? ctx.getPageContext() : `标题: ${document.title}\nURL: ${location.href}`;
+    const pageContext = ctx.getPageContext ? ctx.getPageContext() : `Title: ${document.title}\nURL: ${location.href}`;
 
     const result = await sendMessage(MSG.PREPARE_FILL, { domain });
     if (!result.success) {
-      showToast('获取历史数据失败: ' + result.error, 'error');
+      showToast('Failed to get history data: ' + result.error, 'error');
       return;
     }
 
@@ -186,30 +186,30 @@ async function handleAutoFillClick() {
     }
 
     if (!fillResult.success) {
-      showToast('AI 填充失败: ' + fillResult.error, 'error');
+      showToast('AI fill failed: ' + fillResult.error, 'error');
       return;
     }
 
     const aiFields = fillResult.data.fields || [];
     if (aiFields.length === 0) {
-      showToast('AI 未识别到需要填充的字段', 'warning');
+      showToast('AI detected no fields to fill', 'warning');
       return;
     }
 
     // 6. 展示 AI 输出结果气泡，等用户确认后执行填充
     const confirmed = await showAIResultBubble(aiFields);
     if (!confirmed) {
-      showToast('已取消填充', 'info');
+      showToast('Fill cancelled', 'info');
       return;
     }
 
     // 7. 执行填充
     const count = await fillForm(aiFields);
-    showToast(`✅ 已成功填充 ${count} 个字段`, 'success');
+    showToast(`✅ Successfully filled ${count} fields`, 'success');
 
   } catch (err) {
-    console.error('[FormHelper] 自动填写出错:', err);
-    showToast('自动填写出错: ' + err.message, 'error');
+    console.error('[FormHelper] Auto-fill error:', err);
+    showToast('Auto-fill error: ' + err.message, 'error');
   }
 }
 
@@ -298,7 +298,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
         `<div style="margin-bottom:4px"><div style="color:#999;font-size:11px">${item.label}</div><div style="color:#333;padding:2px 0">${item.value}</div></div>`
       ).join('');
     } else {
-      infoContent.innerHTML = '<div style="color:#999">暂无历史数据，请在下方补充您的信息</div>';
+      infoContent.innerHTML = '<div style="color:#999">No history data yet. Supplement your info below.</div>';
     }
     infoSection.appendChild(infoContent);
     dialog.appendChild(infoSection);
@@ -340,7 +340,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
           const exp = new Date(m.expiresAt);
           const span = document.createElement('span');
           Object.assign(span.style, { color: '#999', fontSize: '11px', marginLeft: '6px' });
-          span.textContent = `(至 ${exp.toLocaleDateString('zh-CN')})`;
+          span.textContent = `(until ${exp.toLocaleDateString('en-US')})`;
           div.appendChild(span);
         }
         memList.appendChild(div);
@@ -363,7 +363,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       color: '#333',
       marginBottom: '6px',
     });
-    previewTitle.textContent = '⚡ 检测到的表单区域';
+    previewTitle.textContent = '⚡ Detected Form Area';
     domPreview.appendChild(previewTitle);
 
     const previewInfo = document.createElement('div');
@@ -396,17 +396,17 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
     previewInfo.innerHTML = `
       <div>Detected <strong>${totalFields}</strong> form fields</div>
       <div style="margin-top:4px;color:#999">
-        ${inputCount > 0 ? `输入框 ${inputCount} 个` : ''}
-        ${selectCount > 0 ? `${inputCount > 0 ? ' · ' : ''}下拉框 ${selectCount} 个` : ''}
-        ${textareaCount > 0 ? `${(inputCount + selectCount) > 0 ? ' · ' : ''}文本域 ${textareaCount} 个` : ''}
+        ${inputCount > 0 ? `Inputs: ${inputCount}` : ''}
+        ${selectCount > 0 ? `${inputCount > 0 ? ' · ' : ''}Selects: ${selectCount}` : ''}
+        ${textareaCount > 0 ? `${(inputCount + selectCount) > 0 ? ' · ' : ''}Textareas: ${textareaCount}` : ''}
       </div>
       <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e0e0e0;display:flex;align-items:center;gap:6px">
-        <span style="color:#888">Est. Tokens：</span>
+        <span style="color:#888">Est. Tokens:</span>
         <strong style="color:${totalEstTokens > 10000 ? '#e53935' : totalEstTokens > 5000 ? '#ff9800' : '#4caf50'}">${totalEstTokens.toLocaleString()}</strong>
-        <span style="color:#bbb;font-size:11px">(DOM ${domTokens.toLocaleString()} + 画像 ${profileTokens.toLocaleString()} + 记忆 ${memoriesTokens.toLocaleString()} + 模板 ${promptBaseTokens.toLocaleString()})</span>
+        <span style="color:#bbb;font-size:11px">(DOM ${domTokens.toLocaleString()} + Profile ${profileTokens.toLocaleString()} + Memory ${memoriesTokens.toLocaleString()} + Template ${promptBaseTokens.toLocaleString()})</span>
       </div>
-      ${totalEstTokens > 10000 ? '<div style="margin-top:4px;color:#e53935;font-size:11px">⚠️ Token 较多，可能产生较高费用，建议检查页面是否包含过多内容</div>' : ''}
-      <div style="margin-top:4px;color:#999">AI 将直接分析表单 DOM 结构来识别字段含义</div>
+      ${totalEstTokens > 10000 ? '<div style="margin-top:4px;color:#e53935;font-size:11px">⚠️ High token count may incur higher costs. Check if the page has excessive content.</div>' : ''}
+      <div style="margin-top:4px;color:#999">AI will directly analyze form DOM structure to identify field meanings</div>
     `;
     domPreview.appendChild(previewInfo);
     dialog.appendChild(domPreview);
@@ -496,7 +496,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       boxSizing: 'border-box',
       transition: 'border-color 0.2s',
     });
-    textarea.placeholder = '例如：地址改成上海市浦东新区陆家嘴环路1000号，邮编200120，公司名叫AI科技有限公司';
+    textarea.placeholder = 'e.g.: Change address to 1000 Lujiazui Ring Rd, Pudong, Shanghai 200120, company is AI Tech Ltd';
     textarea.addEventListener('focus', () => textarea.style.borderColor = '#667eea');
     textarea.addEventListener('blur', () => textarea.style.borderColor = '#ddd');
     inputSection.appendChild(textarea);
@@ -522,7 +522,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       cursor: 'pointer',
       fontSize: '13px',
     });
-    cancelBtn.textContent = '取消';
+    cancelBtn.textContent = 'Cancel';
     cancelBtn.addEventListener('click', () => {
       overlay.remove();
       resolve(null);
@@ -567,25 +567,25 @@ function buildProfileSummary(profile) {
   const items = [];
 
   if (profile.personal) {
-    if (profile.personal.name) items.push({ label: '姓名', value: profile.personal.name });
-    if (profile.personal.gender) items.push({ label: '性别', value: profile.personal.gender });
-    if (profile.personal.birthday) items.push({ label: '生日', value: profile.personal.birthday });
+    if (profile.personal.name) items.push({ label: 'Name', value: profile.personal.name });
+    if (profile.personal.gender) items.push({ label: 'Gender', value: profile.personal.gender });
+    if (profile.personal.birthday) items.push({ label: 'Birthday', value: profile.personal.birthday });
   }
   if (profile.contact) {
-    if (profile.contact.phone) items.push({ label: '手机', value: profile.contact.phone });
-    if (profile.contact.email) items.push({ label: '邮箱', value: profile.contact.email });
+    if (profile.contact.phone) items.push({ label: 'Phone', value: profile.contact.phone });
+    if (profile.contact.email) items.push({ label: 'Email', value: profile.contact.email });
   }
   if (profile.addresses && profile.addresses.length > 0) {
     profile.addresses.forEach(addr => {
-      items.push({ label: addr.label || '地址', value: addr.fullAddress || '...' });
+      items.push({ label: addr.label || 'Address', value: addr.fullAddress || '...' });
     });
   }
   if (profile.work) {
-    if (profile.work.company) items.push({ label: '公司', value: profile.work.company });
-    if (profile.work.position) items.push({ label: '职位', value: profile.work.position });
+    if (profile.work.company) items.push({ label: 'Company', value: profile.work.company });
+    if (profile.work.position) items.push({ label: 'Position', value: profile.work.position });
   }
   if (profile.education) {
-    if (profile.education.school) items.push({ label: '学校', value: profile.education.school });
+    if (profile.education.school) items.push({ label: 'School', value: profile.education.school });
   }
   if (profile.custom) {
     Object.entries(profile.custom).forEach(([k, v]) => {
@@ -604,20 +604,20 @@ function flattenProfile(profile) {
   const add = (key, label, value) => { if (value) list.push({ key, label, value }); };
 
   if (profile.personal) {
-    add('name', '姓名', profile.personal.name);
-    add('gender', '性别', profile.personal.gender);
-    add('birthday', '生日', profile.personal.birthday);
+    add('name', 'Name', profile.personal.name);
+    add('gender', 'Gender', profile.personal.gender);
+    add('birthday', 'Birthday', profile.personal.birthday);
   }
   if (profile.contact) {
-    add('phone', '手机', profile.contact.phone);
-    add('email', '邮箱', profile.contact.email);
+    add('phone', 'Phone', profile.contact.phone);
+    add('email', 'Email', profile.contact.email);
   }
   if (profile.work) {
-    add('company', '公司', profile.work.company);
-    add('position', '职位', profile.work.position);
+    add('company', 'Company', profile.work.company);
+    add('position', 'Position', profile.work.position);
   }
   if (profile.education) {
-    add('school', '学校', profile.education.school);
+    add('school', 'School', profile.education.school);
   }
 
   return list;
@@ -686,7 +686,7 @@ function showLoadingOverlay() {
     fontSize: '12px',
     color: '#999',
   });
-  subText.textContent = '请稍候，正在智能匹配最佳填充方案';
+  subText.textContent = 'Please wait, finding the best fill plan...';
 
   card.appendChild(spinner);
   card.appendChild(text);
@@ -780,7 +780,7 @@ function showAIResultBubble(fields) {
           fontWeight: '600',
           color: '#888',
         });
-        label.textContent = field.label || field.selector || '未知字段';
+        label.textContent = field.label || field.selector || 'Unknown field';
 
         const val = document.createElement('div');
         Object.assign(val.style, {
@@ -812,7 +812,7 @@ function showAIResultBubble(fields) {
         borderTop: '1px dashed #ddd',
         marginTop: '8px',
       });
-      divider.textContent = '⚠️ 以下字段未能填充';
+      divider.textContent = '⚠️ The following fields could not be filled';
       content.appendChild(divider);
 
       skippedFields.forEach(field => {
@@ -825,7 +825,7 @@ function showAIResultBubble(fields) {
           fontSize: '12px',
           color: '#999',
         });
-        row.textContent = `${field.label || field.selector}: 未填充`;
+        row.textContent = `${field.label || field.selector}: Not filled`;
         content.appendChild(row);
       });
     }
@@ -847,7 +847,7 @@ function showAIResultBubble(fields) {
       fontSize: '12px',
       color: '#888',
     });
-    stats.textContent = `共 ${fields.length} 个字段，将填充 ${filledFields.length} 个`;
+    stats.textContent = `Total ${fields.length} fields, will fill ${filledFields.length}`;
 
     const btnGroup = document.createElement('div');
     Object.assign(btnGroup.style, {
@@ -865,7 +865,7 @@ function showAIResultBubble(fields) {
       cursor: 'pointer',
       fontSize: '13px',
     });
-    cancelBtn.textContent = '取消';
+    cancelBtn.textContent = 'Cancel';
     cancelBtn.addEventListener('click', () => {
       overlay.remove();
       resolve(false);
@@ -882,7 +882,7 @@ function showAIResultBubble(fields) {
       fontSize: '13px',
       fontWeight: '600',
     });
-    confirmBtn.textContent = '✅ 确认填充';
+    confirmBtn.textContent = '✅ Confirm Fill';
     confirmBtn.addEventListener('click', () => {
       overlay.remove();
       resolve(true);

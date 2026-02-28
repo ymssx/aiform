@@ -23,15 +23,15 @@ export async function callAI(prompt) {
   const config = await getAIConfig();
 
   if (!config.apiKey) {
-    throw new Error('请先在插件设置中配置 API Key');
+    throw new Error('Please configure API Key in extension settings first');
   }
 
   const url = `${config.apiEndpoint.replace(/\/+$/, '')}/chat/completions`;
   const isQuickMode = config.quickMode === true;
 
   const systemContent = isQuickMode
-    ? '你是一个JSON数据处理专家。所有输出必须是严格的JSON格式，不要包含markdown代码块标记或其他额外文字。不要思考、不要推理、不要解释，直接输出最终JSON结果。'
-    : '你是一个JSON数据处理专家，所有输出必须是严格的JSON格式，不要包含markdown代码块标记或其他额外文字。';
+    ? 'You are a JSON data processing expert. All output must be strict JSON format, do not include markdown code block markers or any extra text. Do not think, do not reason, do not explain, directly output the final JSON result.'
+    : 'You are a JSON data processing expert. All output must be strict JSON format, do not include markdown code block markers or any extra text.';
 
   // 构建请求参数
   const requestBody = {
@@ -78,14 +78,14 @@ export async function callAI(prompt) {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`AI 接口调用失败 (${response.status}): ${errText}`);
+    throw new Error(`AI API call failed (${response.status}): ${errText}`);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
 
   if (!content) {
-    throw new Error('AI 返回内容为空');
+    throw new Error('AI returned empty content');
   }
 
   return content;
@@ -100,7 +100,7 @@ export async function callAIForJSON(prompt) {
   const content = await callAI(prompt);
   const parsed = safeParseJSON(content);
   if (!parsed) {
-    throw new Error('AI 返回的内容无法解析为 JSON: ' + content.substring(0, 200));
+    throw new Error('AI response cannot be parsed as JSON: ' + content.substring(0, 200));
   }
   return parsed;
 }

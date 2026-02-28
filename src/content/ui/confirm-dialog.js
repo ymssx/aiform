@@ -88,7 +88,7 @@ function createDialogElement(data, onClose) {
     fontSize: '13px',
     color: '#666',
   });
-      formNameDiv.textContent = data.formName || '表单数据';
+      formNameDiv.textContent = data.formName || 'Form Data';
   dialog.appendChild(formNameDiv);
 
   // 字段列表
@@ -168,7 +168,7 @@ personal: '#667eea',
       fieldList.appendChild(row);
     });
   } else {
-    fieldList.textContent = '未提取到有效字段';
+    fieldList.textContent = 'No valid fields extracted';
   }
   dialog.appendChild(fieldList);
 
@@ -182,8 +182,8 @@ personal: '#667eea',
     gap: '10px',
   });
 
-  const cancelBtn = createButton('忽略', '#6c757d', () => onClose(false));
-const confirmBtn = createButton('✅ 保存信息', '#667eea', () => onClose(true));
+  const cancelBtn = createButton('Dismiss', '#6c757d', () => onClose(false));
+const confirmBtn = createButton('✅ Save Info', '#667eea', () => onClose(true));
   Object.assign(confirmBtn.style, { fontWeight: '600' });
 
   footer.appendChild(cancelBtn);

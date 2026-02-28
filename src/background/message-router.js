@@ -173,7 +173,7 @@ async function handleMessage(message, sender) {
     }
 
     default:
-      return { success: false, error: `未知消息类型: ${type}` };
+      return { success: false, error: `Unknown message type: ${type}` };
   }
 }
 
