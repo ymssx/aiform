@@ -19,22 +19,12 @@ A Chrome extension built on Manifest V3 that leverages AI large language models 
 - **AI Structured Extraction**: Converts raw form data into structured JSON via AI (with semantic classification, standardized labels)
 - **Auto Profile Accumulation**: Automatically merges data into user profile after each form submission — gets smarter over time
 
-### 🧩 Extensive Component Library Support
-Through a **pluggable adapter registry** architecture, the following component libraries are supported for form element recognition and filling:
+### 🧩 Universal Component Library Support
+Through **AI-powered DOM analysis**, the extension can intelligently recognize and fill form fields across virtually any frontend component library — no manual adapters needed:
 
-| Component Library | Status | Supported Elements |
-|-------------------|--------|--------------------|
-| **Native HTML** | ✅ Built-in | input, select, textarea, contenteditable |
-| **Ant Design** | ✅ Adapted | Input, Select, DatePicker, Cascader, Radio, Checkbox, Switch, etc. |
-| **Element UI / Plus** | ✅ Adapted | Input, Select, DateEditor, Cascader, Radio, Checkbox, Switch, etc. |
-| **TDesign** | ✅ Adapted | Input, Select, DatePicker, Textarea |
-| **Arco Design** | ✅ Adapted | Input, Select, Picker, Cascader, Radio, Checkbox |
-| **Material UI (MUI)** | ✅ Adapted | Input, Select, TextField, Autocomplete |
-| **Naive UI** | ✅ Adapted | Input, Select, DatePicker |
-| **iView / View Design** | ✅ Adapted | Input, Select, DatePicker |
-| **Chakra UI** | ✅ Adapted | Input, Select |
-| **WG Components** | ✅ Adapted | Input, Select (with custom dropdown option extraction & filling) |
-| **mod-form** | ✅ Adapted | Custom form framework |
+- **Native HTML**: input, select, textarea, contenteditable
+- **Major UI Frameworks**: Ant Design, Element UI/Plus, TDesign, Arco Design, Material UI, Naive UI, iView, Chakra UI, and more
+- **Custom Components**: AI analyzes the actual DOM structure to understand custom form elements regardless of the framework used
 
 ### 🔮 Memory System
 - **Auto Memory Extraction**: AI automatically extracts valuable memories from form data and user input (travel plans, preferences, etc.)
@@ -100,7 +90,6 @@ form-helper/
 │   │   ├── form-extractor.js        # Form DOM extraction & simplification
 │   │   ├── form-filler.js           # Form fill executor
 │   │   ├── form-observer.js         # Form submission listener (multi-strategy)
-│   │   ├── component-adapters.js    # Component library adapter registry
 │   │   └── ui/                      # UI Components
 │   │       ├── autofill-button.js   # Floating button + input dialog + AI result bubble
 │   │       ├── confirm-dialog.js    # Data confirmation dialog
@@ -122,8 +111,6 @@ graph TB
         C[autofill-button] -->|Extract DOM| B
         B -->|Simplified DOM| C
         D[form-filler] -->|Execute Fill| E[Page Form]
-        F[component-adapters] -.->|Adapter Rules| B
-        F -.->|Adapter Rules| D
     end
 
     subgraph "Background Service Worker"
@@ -216,57 +203,6 @@ The project uses a custom `build.js` build script (no webpack/rollup needed):
 - **Popup**: Directly copies HTML/JS files
 - **Icons**: Auto-generates placeholder icons (recommended to replace with actual PNG icons)
 
-### Adding a New Component Library Adapter
-
-In [component-adapters.js](/src/content/component-adapters.js), use `registerAdapter()` to register:
-
-```javascript
-registerAdapter({
-  name: 'your-ui-lib',
-
-  // Interactive input element selectors for this library
-  inputSelector: [
-    '.your-input',
-    '.your-select',
-  ],
-
-  // Form container selectors (for form area detection)
-  containerSelector: [
-    '[class*="your-form" i]',
-  ],
-
-  // Label selectors
-  labelSelector: ['.your-form-label'],
-
-  // Type inference rules: className regex → type
-  typeRules: [
-    { match: /your-select/i, type: 'select' },
-    { match: /your-input/i, type: 'text' },
-  ],
-
-  // Dropdown search input selectors (should be excluded to avoid misidentification as form fields)
-  searchInputSelector: [
-    '.your-select-search-input',
-  ],
-
-  // (Optional) Extract options from custom dropdowns
-  optionExtractor(input) {
-    const items = input.closest('.your-select')?.querySelectorAll('.option-item');
-    if (!items) return null;
-    return Array.from(items).map(item => ({
-      value: item.textContent.trim(),
-      text: item.textContent.trim(),
-    }));
-  },
-
-  // (Optional) Set value for custom components
-  valueSetter(input, value) {
-    // Return true = success, false = failure, null = not handled (pass to next adapter)
-    return null;
-  },
-});
-```
-
 ### Messaging Protocol
 
 Content Script and Background communicate via `chrome.runtime.sendMessage`. Message types are defined in the `MSG` constant:
@@ -308,7 +244,7 @@ To control AI call costs, the project implements:
 
 ```
 Original Page DOM
-    ↓ 1. Detect form areas (<form>, adapter container selectors, area detection algorithm)
+    ↓ 1. Detect form areas (<form>, common form container selectors, area detection algorithm)
     ↓ 2. Filter invisible elements (display:none, visibility:hidden, zero dimensions)
     ↓ 3. Remove irrelevant attributes (keep name/id/type/placeholder/value/role/class/data-id, etc.)
     ↓ 4. Clean whitespace and comment nodes

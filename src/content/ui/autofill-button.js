@@ -704,6 +704,27 @@ function showLoadingOverlay() {
  */
 function showAIResultBubble(fields) {
   return new Promise((resolve) => {
+    // 注入高亮动画样式
+    if (!document.getElementById('form-helper-highlight-style')) {
+      const highlightStyle = document.createElement('style');
+      highlightStyle.id = 'form-helper-highlight-style';
+      highlightStyle.textContent = `
+        @keyframes formHelperHighlight {
+          0% { box-shadow: 0 0 0 3px rgba(102,126,234,0.8); }
+          50% { box-shadow: 0 0 0 6px rgba(102,126,234,0.4); }
+          100% { box-shadow: 0 0 0 3px rgba(102,126,234,0.8); }
+        }
+        .form-helper-highlight {
+          animation: formHelperHighlight 1s ease-in-out 3;
+          outline: 2px solid #667eea !important;
+          outline-offset: 2px !important;
+          position: relative;
+          z-index: 999;
+        }
+      `;
+      document.head.appendChild(highlightStyle);
+    }
+
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
       position: 'fixed',
@@ -711,12 +732,13 @@ function showAIResultBubble(fields) {
       left: '0',
       width: '100vw',
       height: '100vh',
-      backgroundColor: 'rgba(0,0,0,0.4)',
+      backgroundColor: 'rgba(0,0,0,0.15)',
       zIndex: '2147483647',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      pointerEvents: 'none',
     });
 
     const bubble = document.createElement('div');
@@ -729,7 +751,13 @@ function showAIResultBubble(fields) {
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
+      pointerEvents: 'auto',
+      position: 'absolute',
     });
+
+    // 拖动功能 - 通过头部拖动
+    let isDragging = false;
+    let dragStartX, dragStartY, bubbleStartX, bubbleStartY;
 
     // 头部
     const header = document.createElement('div');
@@ -740,13 +768,59 @@ function showAIResultBubble(fields) {
       display: 'flex',
       alignItems: 'center',
       gap: '10px',
+      cursor: 'grab',
+      userSelect: 'none',
     });
     header.innerHTML = `
-      <div>
+      <div style="flex:1">
         <div style="font-weight:600;font-size:15px">AI Fill Plan</div>
-        <div style="font-size:11px;opacity:0.85">Review below, then confirm to auto-fill the form</div>
+        <div style="font-size:11px;opacity:0.85">Review below, click locate icon to highlight form fields</div>
+      </div>
+      <div style="font-size:11px;opacity:0.6;display:flex;align-items:center;gap:4px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"></polyline><polyline points="9 5 12 2 15 5"></polyline><polyline points="15 19 12 22 9 19"></polyline><polyline points="19 9 22 12 19 15"></polyline><line x1="2" y1="12" x2="22" y2="12"></line><line x1="12" y1="2" x2="12" y2="22"></line></svg>
+        Drag to move
       </div>
     `;
+
+    // 拖动事件
+    header.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      const rect = bubble.getBoundingClientRect();
+      bubbleStartX = rect.left;
+      bubbleStartY = rect.top;
+      header.style.cursor = 'grabbing';
+
+      const onMouseMove = (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+        let newLeft = bubbleStartX + dx;
+        let newTop = bubbleStartY + dy;
+        // 限制在窗口范围内
+        newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - bubble.offsetWidth));
+        newTop = Math.max(0, Math.min(newTop, window.innerHeight - bubble.offsetHeight));
+        bubble.style.left = newLeft + 'px';
+        bubble.style.top = newTop + 'px';
+        bubble.style.right = 'auto';
+        bubble.style.bottom = 'auto';
+        bubble.style.transform = 'none';
+        bubble.style.margin = '0';
+      };
+
+      const onMouseUp = () => {
+        isDragging = false;
+        header.style.cursor = 'grab';
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
     bubble.appendChild(header);
 
     // 内容区域
@@ -774,13 +848,56 @@ function showAIResultBubble(fields) {
           gap: '4px',
         });
 
+        // Label 行：label 文字 + 定位 icon
+        const labelRow = document.createElement('div');
+        Object.assign(labelRow.style, {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        });
+
         const label = document.createElement('div');
         Object.assign(label.style, {
           fontSize: '11px',
           fontWeight: '600',
           color: '#888',
+          flex: '1',
         });
         label.textContent = field.label || field.selector || 'Unknown field';
+
+        // 定位 icon 按钮
+        const locateBtn = document.createElement('button');
+        Object.assign(locateBtn.style, {
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '2px',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#667eea',
+          opacity: '0.6',
+          transition: 'all 0.2s',
+          flexShrink: '0',
+        });
+        locateBtn.title = 'Locate this field on the page';
+        locateBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>`;
+        locateBtn.addEventListener('mouseenter', () => {
+          locateBtn.style.opacity = '1';
+          locateBtn.style.background = '#f0f0ff';
+        });
+        locateBtn.addEventListener('mouseleave', () => {
+          locateBtn.style.opacity = '0.6';
+          locateBtn.style.background = 'none';
+        });
+        locateBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          highlightFormElement(field.selector, row);
+        });
+
+        labelRow.appendChild(label);
+        labelRow.appendChild(locateBtn);
 
         const val = document.createElement('div');
         Object.assign(val.style, {
@@ -796,7 +913,7 @@ function showAIResultBubble(fields) {
         });
         val.textContent = String(field.value);
 
-        row.appendChild(label);
+        row.appendChild(labelRow);
         row.appendChild(val);
         content.appendChild(row);
       });
@@ -896,7 +1013,76 @@ function showAIResultBubble(fields) {
 
     overlay.appendChild(bubble);
     document.body.appendChild(overlay);
+
+    // 初始居中定位
+    requestAnimationFrame(() => {
+      const bRect = bubble.getBoundingClientRect();
+      bubble.style.left = (window.innerWidth - bRect.width) / 2 + 'px';
+      bubble.style.top = (window.innerHeight - bRect.height) / 2 + 'px';
+    });
   });
+}
+
+/**
+ * 高亮页面上的表单元素
+ * @param {string} selector - CSS 选择器
+ * @param {HTMLElement} row - 预览弹窗中的行元素（用于反馈状态）
+ */
+function highlightFormElement(selector, row) {
+  // 移除之前的高亮
+  document.querySelectorAll('.form-helper-highlight').forEach(el => {
+    el.classList.remove('form-helper-highlight');
+  });
+
+  // 查找目标元素
+  let target = null;
+  try {
+    target = document.querySelector(selector);
+  } catch (e) { /* invalid selector */ }
+
+  // 备用查找（从 selector 中提取 name 或 id）
+  if (!target) {
+    const nameMatch = selector.match(/\[name=["']([^"']+)["']\]/);
+    if (nameMatch) {
+      target = document.querySelector(`[name="${CSS.escape(nameMatch[1])}"]`);
+    }
+  }
+  if (!target) {
+    const idMatch = selector.match(/#([\w-]+)/);
+    if (idMatch) {
+      target = document.getElementById(idMatch[1]);
+    }
+  }
+
+  if (!target) {
+    // 闪烁提示行：未找到
+    if (row) {
+      const origBg = row.style.background;
+      row.style.background = '#fff3e0';
+      row.style.transition = 'background 0.3s';
+      setTimeout(() => { row.style.background = origBg; }, 1500);
+    }
+    return;
+  }
+
+  // 添加高亮
+  target.classList.add('form-helper-highlight');
+
+  // 滚动到可视区域
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // 闪烁提示行：找到了
+  if (row) {
+    const origBg = row.style.background;
+    row.style.background = '#e8f5e9';
+    row.style.transition = 'background 0.3s';
+    setTimeout(() => { row.style.background = origBg; }, 1000);
+  }
+
+  // 3 秒后移除高亮
+  setTimeout(() => {
+    target.classList.remove('form-helper-highlight');
+  }, 3000);
 }
 
 /**
