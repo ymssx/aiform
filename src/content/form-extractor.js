@@ -85,8 +85,41 @@ export function extractFormDOMWithMapping(maxLen = 15000) {
   }
 
   console.log(`[FormHelper] Total unique interactive elements found: ${allInteractiveSet.size}`);
-  
+
+  // 去除存在祖先-后代关系的重复元素：
+  // 如果一个外层元素（如 div[role="combobox"]）内部包含了一个真实的 input，
+  // 两者都匹配 INTERACTIVE_SELECTOR，但实际是同一个表单字段。
+  // 优先保留内层（真实 input），跳过外层容器，避免多个 id 指向同一个 input。
+  const filteredElements = new Set(allInteractiveSet);
   for (const el of allInteractiveSet) {
+    // 如果这个元素内部还包含其他匹配的可交互元素，说明它是外层容器
+    const innerInteractives = el.querySelectorAll('input:not([type="hidden"]), textarea, select');
+    if (innerInteractives.length > 0) {
+      // 检查内部的 input 是否也在集合中
+      for (const inner of innerInteractives) {
+        if (allInteractiveSet.has(inner)) {
+          // 外层容器移除，保留内层真实 input
+          filteredElements.delete(el);
+          console.log(`[FormHelper] 去重: 跳过外层容器 <${el.tagName.toLowerCase()} role="${el.getAttribute('role') || ''}"> (内含 <${inner.tagName.toLowerCase()}>)`);
+          break;
+        }
+      }
+    }
+    // 同样检查 Shadow DOM 内部
+    if (filteredElements.has(el) && el.shadowRoot) {
+      const shadowInners = el.shadowRoot.querySelectorAll('input:not([type="hidden"]), textarea, select');
+      for (const inner of shadowInners) {
+        if (allInteractiveSet.has(inner)) {
+          filteredElements.delete(el);
+          console.log(`[FormHelper] 去重: 跳过外层容器 <${el.tagName.toLowerCase()}> (Shadow DOM 内含 <${inner.tagName.toLowerCase()}>)`);
+          break;
+        }
+      }
+    }
+  }
+  console.log(`[FormHelper] After ancestor-descendant dedup: ${filteredElements.size} elements (removed ${allInteractiveSet.size - filteredElements.size})`);
+  
+  for (const el of filteredElements) {
     // 跳过真正隐藏的（display:none 且无尺寸的）
     try {
       const ownerDoc = el.ownerDocument;
@@ -220,34 +253,228 @@ export function extractFormDOMWithMappingRetry(maxWaitMs = 2000) {
 
 /**
  * 内部方法：提取简化 HTML（被 extractFormDOMWithMapping 调用）
+ * 
+ * 核心策略：
+ * 1. 用 detectFormRegions 找到所有表单区域（form标签 + 补充策略）
+ * 2. 对每个区域做 simplifyDOM
+ * 3. 全部拼在一起输出给 AI
  */
 function _extractSimplifiedHTML(maxLen = 15000) {
-  const regions = detectFormRegions();
+  const taggedElements = document.querySelectorAll('[data-fh-id]');
 
-  let html = '';
-  if (regions.length > 0) {
+  // 没有标记元素时的兜底处理
+  if (taggedElements.length === 0) {
+    const iframeHtml = extractFromIframes();
+    if (iframeHtml) return iframeHtml.substring(0, maxLen);
+    const bodyHtml = simplifyDOM(document.body);
+    if (bodyHtml.length > maxLen) {
+      return bodyHtml.substring(0, maxLen) + '\n<!-- ... 内容过长已截断 -->';
+    }
+    return bodyHtml;
+  }
+
+  // ========== 核心：找到所有表单区域，simplifyDOM 后拼接 ==========
+  const regions = detectFormRegions();
+  console.log(`[FormHelper] _extractSimplifiedHTML: detectFormRegions 返回了 ${regions.length} 个区域, tagged元素共 ${taggedElements.length} 个`);
+
+  const formHtmlParts = [];
+  const coveredElements = new Set();
+
+  for (const region of regions) {
+    // body 作为区域时特殊处理（降级场景）
+    if (region === document.body) {
+      const bodyHtml = simplifyDOM(document.body);
+      if (bodyHtml.length > maxLen) {
+        return bodyHtml.substring(0, maxLen) + '\n<!-- ... 内容过长已截断 -->';
+      }
+      return bodyHtml;
+    }
+
+    const regionHtml = simplifyDOM(region);
+    const fhIdCount = (regionHtml.match(/data-fh-id/g) || []).length;
+
+    // 跳过不包含 tagged 元素的区域
+    if (fhIdCount === 0) {
+      console.log(`[FormHelper] Skipping region <${region.tagName.toLowerCase()} id="${region.id || ''}"> (no tagged elements)`);
+      continue;
+    }
+
+    console.log(`[FormHelper] Region <${region.tagName.toLowerCase()} id="${region.id || ''}"> -> ${fhIdCount} fh-ids, ${regionHtml.length} chars`);
+    formHtmlParts.push(regionHtml);
+
+    // 记录这个区域覆盖了哪些 tagged 元素
+    region.querySelectorAll('[data-fh-id]').forEach(el => coveredElements.add(el));
+  }
+
+  // 检查是否有 tagged 元素不在任何检测到的区域内
+  // 注意：Shadow DOM 内的元素用 contains() 可能检测不到，需要特殊处理
+  const uncoveredElements = Array.from(taggedElements).filter(el => {
+    if (coveredElements.has(el)) return false;
+    // 检查元素是否在某个 region 的 Shadow DOM 内
     for (const region of regions) {
-      html += simplifyDOM(region);
+      if (region.contains(el)) return false;
+      // 穿透 Shadow DOM 检查：元素的 getRootNode() 链上是否有 region
+      let root = el.getRootNode();
+      while (root && root !== document) {
+        if (root.host && region.contains(root.host)) return false;
+        root = root.host ? root.host.getRootNode() : document;
+      }
+    }
+    return true;
+  });
+
+  if (uncoveredElements.length > 0) {
+    console.log(`[FormHelper] ${uncoveredElements.length} tagged elements are NOT inside any detected region, extracting their context...`);
+
+    // 对不在已检测区域内的元素，找它们各自最近的合理容器
+    const containers = _findFormItemContainers(uncoveredElements);
+    const uniqueContainers = _deduplicateContainers(containers);
+
+    for (const { container } of uniqueContainers) {
+      const containerHtml = simplifyDOM(container);
+      if (containerHtml) {
+        formHtmlParts.push(containerHtml);
+      }
     }
   }
 
-  // 如果表单区域检测不到，尝试 iframe
-  if (!html) {
-    html = extractFromIframes();
+  // 如果没有找到任何有效区域，降级用 body
+  if (formHtmlParts.length === 0) {
+    console.log(`[FormHelper] No regions with tagged elements, falling back to body`);
+    const bodyHtml = simplifyDOM(document.body);
+    if (bodyHtml.length > maxLen) {
+      return bodyHtml.substring(0, maxLen) + '\n<!-- ... 内容过长已截断 -->';
+    }
+    return bodyHtml;
   }
 
-  // 如果还是空，兜底扫描 body
-  if (!html) {
-    html = simplifyDOM(document.body);
+  // ========== 拼接输出 ==========
+  if (formHtmlParts.length === 1) {
+    const html = formHtmlParts[0];
+    console.log(`[FormHelper] Single region output: ${html.length} chars`);
+    if (html.length > maxLen) {
+      return html.substring(0, maxLen) + '\n<!-- ... 内容过长已截断 -->';
+    }
+    return html;
   }
 
-  // 截断过长的 HTML
-  if (html.length > maxLen) {
-    html = html.substring(0, maxLen) + '\n<!-- ... 内容过长已截断 -->';
+  // 多个区域拼接
+  let result = '<form-fields>\n';
+  let truncated = false;
+
+  for (let i = 0; i < formHtmlParts.length; i++) {
+    const part = `<!-- 表单区域 ${i + 1} -->\n${formHtmlParts[i]}\n`;
+    if (result.length + part.length + 20 > maxLen) {
+      truncated = true;
+      const remaining = maxLen - result.length - 50;
+      if (remaining > 100) {
+        result += part.substring(0, remaining);
+      }
+      break;
+    }
+    result += part;
   }
 
-  return html;
+  result += '</form-fields>';
+
+  if (truncated) {
+    const includedCount = (result.match(/data-fh-id/g) || []).length;
+    console.warn(`[FormHelper] Output truncated: ${includedCount}/${taggedElements.length} fields included`);
+  }
+
+  const totalFhIds = (result.match(/data-fh-id/g) || []).length;
+  console.log(`[FormHelper] 最终输出: ${formHtmlParts.length} 个区域, ${totalFhIds}/${taggedElements.length} 个表单字段, ${result.length} chars`);
+  return result;
 }
+
+/**
+ * 为不在 <form> 内的表单元素查找最近的合理容器
+ * 向上遍历 DOM 树，找到一个包含 label 或有表单语义的容器
+ */
+function _findFormItemContainers(taggedElements) {
+  const results = [];
+
+  for (const el of taggedElements) {
+    let container = null;
+    let current = el.parentElement;
+    let depth = 0;
+
+    while (current && current !== document.body && current !== document.documentElement && depth < 10) {
+      const tagName = current.tagName;
+
+      // 遇到 form / fieldset / section / article 这些语义容器就停
+      if (tagName === 'FORM' || tagName === 'FIELDSET' || tagName === 'SECTION' || tagName === 'ARTICLE') {
+        container = current;
+        break;
+      }
+
+      // 如果当前层包含 label 且只有 1 个 tagged 元素，是理想的表单项容器
+      const hasLabel = current.querySelector('label');
+      const taggedCount = current.querySelectorAll('[data-fh-id]').length;
+      if (hasLabel && taggedCount <= 1) {
+        container = current;
+        break;
+      }
+
+      // 如果当前层有多个 tagged 元素，说明已经是更大的容器了，用它
+      if (taggedCount > 1) {
+        container = current;
+        break;
+      }
+
+      container = current;
+      current = current.parentElement;
+      depth++;
+    }
+
+    if (!container) {
+      container = el.parentElement || el;
+    }
+
+    results.push({ element: el, container });
+  }
+
+  return results;
+}
+
+/**
+ * 去重容器：如果一个容器包含另一个容器，保留外层的
+ */
+function _deduplicateContainers(containerResults) {
+  const unique = [];
+  const seen = new Set();
+
+  for (const item of containerResults) {
+    // 跳过已被其他容器包含的
+    if (seen.has(item.container)) continue;
+
+    // 检查是否被已有容器包含
+    let isContained = false;
+    for (const existing of unique) {
+      if (existing.container.contains(item.container)) {
+        isContained = true;
+        break;
+      }
+      // 如果当前容器包含已有容器，替换
+      if (item.container.contains(existing.container)) {
+        const idx = unique.indexOf(existing);
+        unique[idx] = item;
+        seen.add(item.container);
+        isContained = true;
+        break;
+      }
+    }
+
+    if (!isContained) {
+      unique.push(item);
+      seen.add(item.container);
+    }
+  }
+
+  return unique;
+}
+
+
 
 /**
  * 带重试的表单 DOM 提取（支持 SPA 动态渲染场景）
@@ -345,7 +572,18 @@ function _simplifyNode(node, depth) {
   // 构建简化后的标签
   const tagLower = tag.toLowerCase();
   const attrs = _simplifyAttrs(node);
-  const childrenHtml = _simplifyChildren(node, depth + 1);
+  let childrenHtml = _simplifyChildren(node, depth + 1);
+
+  // ===== Shadow DOM 穿透：如果元素有 shadowRoot，也遍历其内部内容 =====
+  if (node.shadowRoot) {
+    let shadowHtml = '';
+    for (const child of node.shadowRoot.childNodes) {
+      shadowHtml += _simplifyNode(child, depth + 1);
+    }
+    if (shadowHtml) {
+      childrenHtml += shadowHtml;
+    }
+  }
 
   // 如果子节点为空且不是表单元素，跳过
   const isFormEl = _isFormElement(node);
@@ -511,27 +749,52 @@ function _escapeAttr(str) {
 
 /**
  * 检测页面中的表单区域
+ * 多策略递进：先找 <form>，再用补充策略找不在 form 内的表单区域
+ * 目标是找到尽可能多的表单区域
  * @returns {HTMLElement[]}
  */
 export function detectFormRegions() {
   const regions = new Set();
-  const inputSelector = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), select, textarea, [role="textbox"], [role="combobox"], [contenteditable="true"]';
 
   function countInputs(el) {
-    return el.querySelectorAll(inputSelector).length;
+    // 标准 querySelectorAll
+    const standard = el.querySelectorAll(INTERACTIVE_SELECTOR).length;
+    // 已经被标记 data-fh-id 的元素（穿透 Shadow DOM 后标记的）
+    const tagged = el.querySelectorAll('[data-fh-id]').length;
+    // 穿透 Shadow DOM 查找
+    const deep = deepQuerySelectorAll(el, INTERACTIVE_SELECTOR).length;
+    return Math.max(standard, tagged, deep);
   }
 
-  // 策略1：原生 <form> 标签
-  document.querySelectorAll('form').forEach(f => {
-    if (countInputs(f) > 0) regions.add(f);
+  // ===== 策略1：原生 <form> 标签（最可靠） =====
+  const allForms = document.querySelectorAll('form');
+  console.log(`[FormHelper] detectFormRegions 策略1: 页面上共有 ${allForms.length} 个 <form> 标签`);
+  allForms.forEach((f, i) => {
+    const standardCount = f.querySelectorAll(INTERACTIVE_SELECTOR).length;
+    const taggedCount = f.querySelectorAll('[data-fh-id]').length;
+    const deepCount = deepQuerySelectorAll(f, INTERACTIVE_SELECTOR).length;
+    const inputCount = countInputs(f);
+    const rect = f.getBoundingClientRect();
+    const visible = rect.width > 0 && rect.height > 0;
+    console.log(`[FormHelper]   [form ${i+1}] <form id="${f.id || ''}" class="${(f.className || '').toString().substring(0, 60)}"> inputs=${inputCount}(standard=${standardCount}, tagged=${taggedCount}, deep=${deepCount}), visible=${visible}, size=${Math.round(rect.width)}x${Math.round(rect.height)}, childElements=${f.querySelectorAll('*').length}`, f);
+    if (inputCount > 0) {
+      regions.add(f);
+      console.log(`[FormHelper]     ✅ 已加入 regions`);
+    } else {
+      console.log(`[FormHelper]     ❌ 跳过（无可交互元素）`);
+    }
   });
 
-  // 策略2：ARIA role="form"
-  document.querySelectorAll('[role="form"]').forEach(f => {
-    if (countInputs(f) > 0) regions.add(f);
-  });
+  // ===== 策略2：ARIA role="form" =====
+  const roleForms = document.querySelectorAll('[role="form"]');
+  if (roleForms.length > 0) {
+    console.log(`[FormHelper] detectFormRegions 策略2: 找到 ${roleForms.length} 个 [role="form"]`);
+    roleForms.forEach(f => {
+      if (countInputs(f) > 0) regions.add(f);
+    });
+  }
 
-  // 策略3：常见 form 容器标记
+  // ===== 策略3：常见 form 容器标记 =====
   const markedSelectors = [
     '[data-form]', '[data-id="form"]',
     '[data-testid*="form" i]',
@@ -545,116 +808,137 @@ export function detectFormRegions() {
     } catch (e) { /* invalid selector */ }
   }
 
-  if (regions.size > 0) return deduplicateRegions(Array.from(regions));
+  // 策略1-3 找到的先记下，不立即 return，继续找补充
+  const earlyCount = regions.size;
+  console.log(`[FormHelper] detectFormRegions 策略1-3 合计: ${earlyCount} 个区域`);
 
-  // 策略4：class/id 包含 form 的容器
+  // ===== 策略4：class/id 包含 form 的容器、弹窗/抽屉 =====
   const classPatterns = [
     '[class*="form" i]:not(button):not(input):not(select):not(textarea):not(label):not(span)',
     '[id*="form" i]:not(button):not(input):not(select):not(textarea):not(label):not(span)',
-    // 弹窗/抽屉容器（表单经常在弹窗里）
     '[class*="modal" i]', '[class*="dialog" i]', '[class*="drawer" i]',
     '[role="dialog"]', '[role="alertdialog"]',
   ];
 
+  let strategy4Count = 0;
   for (const selector of classPatterns) {
     try {
       document.querySelectorAll(selector).forEach(el => {
         const inputCount = countInputs(el);
         if (inputCount >= 1) {
           const bodyInputs = countInputs(document.body);
+          // 排除覆盖面太广的容器（几乎包含所有input的就不要了）
           if (inputCount < bodyInputs * 0.9 || bodyInputs <= 5) {
+            if (!regions.has(el)) {
+              console.log(`[FormHelper]   策略4 新增: <${el.tagName.toLowerCase()} id="${el.id || ''}" class="${(el.className || '').toString().substring(0, 60)}"> inputs=${inputCount}`);
+              strategy4Count++;
+            }
             regions.add(el);
           }
         }
       });
     } catch (e) { /* invalid selector */ }
   }
-
-  if (regions.size > 0) return deduplicateRegions(Array.from(regions));
-
-  // 策略5：密度聚类
-  const allInputs = Array.from(document.querySelectorAll(inputSelector)).filter(el => {
-    try { return getComputedStyle(el).display !== 'none'; } catch { return true; }
-  });
-
-  if (allInputs.length === 0) return [];
-
-  const containers = new Map();
-  for (const input of allInputs) {
-    let parent = input.parentElement;
-    let depth = 0;
-    while (parent && parent !== document.body && depth < 12) {
-      const count = countInputs(parent);
-      if (count >= 1) {
-        containers.set(parent, Math.max(containers.get(parent) || 0, count));
-      }
-      parent = parent.parentElement;
-      depth++;
-    }
+  if (strategy4Count > 0) {
+    console.log(`[FormHelper] detectFormRegions 策略4: 新增 ${strategy4Count} 个区域`);
   }
 
-  if (containers.size > 0) {
-    const scored = [];
-    for (const [el, inputCount] of containers) {
-      const totalChildren = el.querySelectorAll('*').length;
-      if (totalChildren > 1500) continue;
-      const density = inputCount / Math.max(totalChildren, 1);
-      scored.push({ el, score: inputCount * density, inputCount });
-    }
-    scored.sort((a, b) => b.score - a.score);
+  // ===== 策略5：密度聚类（兜底：没有任何 form 容器时） =====
+  if (regions.size === 0) {
+    console.log(`[FormHelper] No form containers found, trying density clustering...`);
+    const allInputs = Array.from(document.querySelectorAll(INTERACTIVE_SELECTOR)).filter(el => {
+      try { return getComputedStyle(el).display !== 'none'; } catch { return true; }
+    });
 
-    const selected = [];
-    for (const item of scored) {
-      if (item.score < 0.01) break;
-      const isContained = selected.some(s => s.el.contains(item.el) || item.el.contains(s.el));
-      if (!isContained) selected.push(item);
-      if (selected.length >= 5) break;
-    }
-
-    if (selected.length > 0) {
-      return selected.map(s => s.el);
-    }
-  }
-
-  // 策略6：公共祖先
-  if (allInputs.length >= 2) {
-    let ancestor = allInputs[0].parentElement;
-    while (ancestor) {
-      if (allInputs.every(el => ancestor.contains(el))) {
-        if (ancestor !== document.body && ancestor !== document.documentElement) {
-          return [ancestor];
+    if (allInputs.length > 0) {
+      const containers = new Map();
+      for (const input of allInputs) {
+        let parent = input.parentElement;
+        let depth = 0;
+        while (parent && parent !== document.body && depth < 12) {
+          const count = countInputs(parent);
+          if (count >= 1) {
+            containers.set(parent, Math.max(containers.get(parent) || 0, count));
+          }
+          parent = parent.parentElement;
+          depth++;
         }
-        break;
       }
-      ancestor = ancestor.parentElement;
+
+      if (containers.size > 0) {
+        const scored = [];
+        for (const [el, inputCount] of containers) {
+          const totalChildren = el.querySelectorAll('*').length;
+          if (totalChildren > 1500) continue;
+          const density = inputCount / Math.max(totalChildren, 1);
+          scored.push({ el, score: inputCount * density, inputCount });
+        }
+        scored.sort((a, b) => b.score - a.score);
+
+        const selected = [];
+        for (const item of scored) {
+          if (item.score < 0.01) break;
+          const isContained = selected.some(s => s.el.contains(item.el) || item.el.contains(s.el));
+          if (!isContained) selected.push(item);
+          if (selected.length >= 5) break;
+        }
+
+        for (const item of selected) {
+          regions.add(item.el);
+        }
+      }
     }
   }
 
-  // 策略7：body 兜底
-  if (allInputs.length >= 1 && allInputs.length <= 50) {
-    return [document.body];
+  // ===== 去重并返回 =====
+  if (regions.size > 0) {
+    console.log(`[FormHelper] detectFormRegions 去重前: ${regions.size} 个区域:`);
+    Array.from(regions).forEach((r, i) => {
+      console.log(`[FormHelper]   [${i+1}] <${r.tagName.toLowerCase()} id="${r.id || ''}" class="${(r.className || '').toString().substring(0, 60)}"> children=${r.querySelectorAll('*').length}`);
+    });
+    const deduped = _deduplicateRegions(Array.from(regions));
+    console.log(`[FormHelper] detectFormRegions 去重后: ${deduped.length} 个区域:`);
+    deduped.forEach((r, i) => {
+      console.log(`[FormHelper]   [${i+1}] <${r.tagName.toLowerCase()} id="${r.id || ''}" class="${(r.className || '').toString().substring(0, 60)}"> children=${r.querySelectorAll('*').length}`);
+    });
+    return deduped;
   }
 
-  return [];
+  // 终极兜底：body
+  console.log(`[FormHelper] ⚠️ 所有策略都未找到表单区域，降级使用 body`);
+  return [document.body];
 }
 
 /**
- * 去重：保留最精确的容器
+ * 去重表单区域：当存在包含关系时，保留更小（更精确）的容器
+ * 平级的多个区域全部保留
  */
-function deduplicateRegions(regions) {
+function _deduplicateRegions(regions) {
   if (regions.length <= 1) return regions;
+
+  // 按子元素数量从小到大排序
   regions.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length);
 
   const result = [];
   for (const region of regions) {
+    // 当前 region 已被已有更小区域的某个覆盖？（不太可能因为从小到大排序）
     const isContained = result.some(r => r.contains(region));
-    const contains = result.some(r => region.contains(r));
-    if (!isContained && !contains) {
-      result.push(region);
+    if (isContained) continue;
+
+    // 当前 region 包含了已有的更小区域？保留小的，跳过大的
+    const containsExisting = result.some(r => region.contains(r));
+    if (containsExisting) {
+      console.log(`[FormHelper] dedup: skipping larger <${region.tagName.toLowerCase()} id="${region.id || ''}"> (contains smaller regions)`);
+      continue;
     }
+
+    result.push(region);
   }
+
   return result;
 }
+
+
 
 /**
  * 从同源 iframe 中提取简化 DOM
@@ -684,8 +968,7 @@ function extractFromIframes() {
  * 检测页面是否有表单区域（快速检查，用于判断是否显示填写按钮）
  */
 export function hasFormOnPage() {
-  const inputSelector = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), select, textarea, [role="textbox"], [role="combobox"], [contenteditable="true"]';
-  const inputs = document.querySelectorAll(inputSelector);
+  const inputs = document.querySelectorAll(INTERACTIVE_SELECTOR);
   return inputs.length > 0;
 }
 

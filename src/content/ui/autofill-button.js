@@ -154,6 +154,10 @@ async function handleAutoFillClick() {
     // 设置元素映射表，供 fillForm 通过 id 直接获取 DOM 元素
     setElementMap(elementMap);
     console.log(`[FormHelper] Simplified DOM (${elementCount} elements, ${simplifiedDOM.length} chars)`);
+    // 打印完整的简化 DOM HTML（方便排查提交给 AI 的内容）
+    console.log('[FormHelper] ===== SIMPLIFIED DOM HTML =====');
+    console.log(simplifiedDOM);
+    console.log('[FormHelper] ===== END OF SIMPLIFIED DOM HTML =====');
 
     // 2. 获取历史用户画像和记忆
     const ctx = window.__formHelperContext || {};
@@ -196,6 +200,11 @@ async function handleAutoFillClick() {
       showToast('AI fill failed: ' + fillResult.error, 'error');
       return;
     }
+
+    // 打印 AI 返回的原始结果（方便在页面控制台排查）
+    console.log('[FormHelper] ===== AI FILL RESULT (in content script) =====');
+    console.log(JSON.stringify(fillResult.data, null, 2));
+    console.log('[FormHelper] ===== END OF AI FILL RESULT =====');
 
     const aiFields = fillResult.data.fields || [];
     if (aiFields.length === 0) {

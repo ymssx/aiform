@@ -47,6 +47,8 @@ export async function fillForm(fields) {
   if (!fields || !Array.isArray(fields)) return 0;
 
   let filledCount = 0;
+  // 记录已经填充过的真实 input 元素，防止多个 data-fh-id 映射到同一个 input 导致重复覆盖
+  const filledInputs = new Set();
 
   for (const field of fields) {
     if (field.value === null || field.value === undefined || field.value === '') continue;
@@ -60,6 +62,15 @@ export async function fillForm(fields) {
         el = _elementMap.get(Number(field.id));
       }
 
+      // 检查真实 input 是否已被填充过，避免重复填写到同一个 input
+      if (el) {
+        const realInput = findRealInput(el);
+        if (realInput && filledInputs.has(realInput)) {
+          console.warn(`[FormHelper] ⚠️ 跳过重复填充: ${field.label} (id: ${field.id}) -> 真实 input 已被其他字段填充过`, realInput);
+          continue;
+        }
+      }
+
       console.log(`[FormHelper] 🔍 ${field.label}`, el || field.selector, field.value);
 
       const success = el
@@ -69,6 +80,11 @@ export async function fillForm(fields) {
       if (success) {
         filledCount++;
         console.log(`[FormHelper] ✅ ${field.label}: ${field.value}`);
+        // 记录已填充的真实 input 元素
+        if (el) {
+          const realInput = findRealInput(el);
+          if (realInput) filledInputs.add(realInput);
+        }
       } else {
         console.warn(`[FormHelper] ❌ Failed: ${field.label} (id: ${field.id}, selector: ${field.selector})`);
       }
@@ -587,8 +603,23 @@ function findRealInput(el) {
   if (!el) return null;
   const tag = el.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return el;
+  // 先在 light DOM 中查找
   const inner = el.querySelector('input:not([type="hidden"]), textarea, select');
-  return inner || el;
+  if (inner) return inner;
+  // 穿透 Shadow DOM 查找
+  if (el.shadowRoot) {
+    const shadowInner = el.shadowRoot.querySelector('input:not([type="hidden"]), textarea, select');
+    if (shadowInner) return shadowInner;
+  }
+  // 递归检查子元素的 Shadow DOM
+  const children = el.querySelectorAll('*');
+  for (const child of children) {
+    if (child.shadowRoot) {
+      const shadowInner = child.shadowRoot.querySelector('input:not([type="hidden"]), textarea, select');
+      if (shadowInner) return shadowInner;
+    }
+  }
+  return el;
 }
 
 // ============================================

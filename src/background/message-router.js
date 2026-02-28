@@ -76,7 +76,14 @@ async function handleMessage(message, sender) {
       const config = await getConfig();
 
       const prompt = buildFillPrompt(simplifiedDOM, profile, memories, userSupplement, pageContext, { quickMode: config.quickMode });
+      console.log('[FormHelper] ===== PROMPT SENT TO AI =====');
+      console.log(prompt);
+      console.log('[FormHelper] ===== END OF PROMPT =====');
+
       const result = await callAIForJSON(prompt);
+      console.log('[FormHelper] ===== AI RAW RESPONSE =====');
+      console.log(JSON.stringify(result, null, 2));
+      console.log('[FormHelper] ===== END OF AI RESPONSE =====');
 
       // 更新用户画像
       if (result.updatedProfile) {

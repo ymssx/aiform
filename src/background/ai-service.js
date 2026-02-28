@@ -41,7 +41,7 @@ export async function callAI(prompt) {
       { role: 'user', content: prompt },
     ],
     temperature: isQuickMode ? 0 : 0.1,
-    max_tokens: 2000,
+    max_tokens: 8192,
   };
 
   // 快速模式：尝试禁用模型的深度思考/推理能力

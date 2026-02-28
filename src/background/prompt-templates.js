@@ -101,10 +101,15 @@ ${memories.length > 0 ? memories.map(m => `- ${m.content}`).join('\n') : 'None'}
 
 ${userSupplement?.includes?.('[AI_GENERATE]') ? '【MUST generate content for every field, NEVER return null】' : ''}
 
-## Output Format (strict JSON)
-{"fields":[{"id":1,"label":"field name","value":"value to fill","type":"text|select|textarea|checkbox|radio"}],"updatedProfile":{},"newMemories":[],"changeLog":[]}
+## Output Format (strict JSON, no extra text)
+{"fields":[{"id":1,"label":"field name","value":"value to fill","type":"text|select|textarea|checkbox|radio"}]}
 
-IMPORTANT: "id" must be the data-fh-id number from the HTML. For select, value must be chosen from <option> text. For radio/checkbox, fill the option's value or text.`;
+IMPORTANT:
+- "id" must be the data-fh-id number from the HTML
+- For select, value must be chosen from <option> text
+- For radio/checkbox, fill the option's value or text
+- Output ALL fillable fields, do NOT skip any
+- fields array MUST be complete`;
   }
 
   // Standard mode: full detailed prompt
@@ -174,27 +179,15 @@ Return an instruction object for each field that needs filling:
       "type": "field type"
     }
   ],
-  "updatedProfile": {
-    "personal": { "name": "...", "gender": "...", "birthday": "..." },
-    "contact": { "phone": "...", "email": "..." },
-    "addresses": [{ "label": "Default Address", "fullAddress": "..." }],
-    "work": { "company": "...", "position": "..." },
-    "education": { "school": "...", "major": "..." },
-    "preferences": {},
-    "custom": {}
-  },
-  "newMemories": [
-    {
-      "content": "New memory extracted from user supplement",
-      "category": "intent|preference|fact|context",
-      "expiresAt": null,
-      "metadata": {}
-    }
-  ],
-  "changeLog": [
-    "Change description"
-  ]
+  "updatedProfile": {},
+  "newMemories": [],
+  "changeLog": []
 }
+
+**CRITICAL**: 
+- The "fields" array is the most important part. You MUST output ALL fillable fields. Do NOT omit any.
+- Put ALL fields FIRST, then updatedProfile/newMemories/changeLog (keep these minimal/empty if token budget is tight).
+- If a field's meaning is unclear, still try to fill it with a reasonable guess.
 
 Current timestamp: ${Date.now()}`;
 }
