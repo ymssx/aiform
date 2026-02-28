@@ -3,8 +3,8 @@
 // 自动填写按钮 + 补充输入弹窗
 // ============================================
 
-import { extractSimplifiedFormDOMWithRetry, hasFormOnPage } from '../form-extractor.js';
-import { fillForm } from '../form-filler.js';
+import { extractFormDOMWithMappingRetry, hasFormOnPage } from '../form-extractor.js';
+import { fillForm, setElementMap, clearElementMap, getElementMap } from '../form-filler.js';
 import { sendMessage } from '../../shared/utils.js';
 import { MSG } from '../../shared/constants.js';
 
@@ -143,13 +143,17 @@ function setupDrag(el) {
  */
 async function handleAutoFillClick() {
   try {
-    // 1. 提取简化的表单 DOM HTML（带重试，支持 SPA 动态渲染）
+    // 1. 提取简化 HTML + 元素映射（带重试，支持 SPA 动态渲染）
     showToast('Detecting form...', 'info');
-    const simplifiedDOM = await extractSimplifiedFormDOMWithRetry(2000);
-    if (!simplifiedDOM || simplifiedDOM.trim().length < 50) {
+    const { html: simplifiedDOM, elementMap, elementCount } = await extractFormDOMWithMappingRetry(2000);
+    if (elementCount === 0) {
       showToast('No form detected on this page. Please ensure there are fillable input fields.', 'warning');
       return;
     }
+
+    // 设置元素映射表，供 fillForm 通过 id 直接获取 DOM 元素
+    setElementMap(elementMap);
+    console.log(`[FormHelper] Simplified DOM (${elementCount} elements, ${simplifiedDOM.length} chars)`);
 
     // 2. 获取历史用户画像和记忆
     const ctx = window.__formHelperContext || {};
@@ -164,16 +168,19 @@ async function handleAutoFillClick() {
 
     const { profile, memories } = result.data;
 
-    // 3. 弹出补充输入弹窗（展示记忆信息和简化DOM概览）
-    const supplement = await showSupplementDialog(profile, simplifiedDOM, memories || []);
-    if (supplement === null) return; // 用户取消
+    // 3. 弹出补充输入弹窗（展示简化 DOM 概览）
+    const supplement = await showSupplementDialog(profile, simplifiedDOM, elementCount, memories || []);
+    if (supplement === null) {
+      clearElementMap();
+      return; // 用户取消
+    }
 
     // 4. 显示 Loading 状态
     const loadingOverlay = showLoadingOverlay();
 
     let fillResult;
     try {
-      // 5. 调用 AI 分析 DOM 并生成填充指令
+      // 5. 调用 AI 分析简化 HTML 并生成填充指令
       fillResult = await sendMessage(MSG.EXECUTE_FILL, {
         simplifiedDOM,
         userSupplement: supplement,
@@ -207,20 +214,25 @@ async function handleAutoFillClick() {
     const count = await fillForm(aiFields);
     showToast(`✅ Successfully filled ${count} fields`, 'success');
 
+    // 填充完成后清除元素映射
+    clearElementMap();
+
   } catch (err) {
     console.error('[FormHelper] Auto-fill error:', err);
     showToast('Auto-fill error: ' + err.message, 'error');
+    clearElementMap();
   }
 }
 
 /**
  * 显示补充输入弹窗
  * @param {Object} profile - 用户画像
- * @param {string} simplifiedDOM - 简化后的 DOM HTML
+ * @param {string} simplifiedDOM - 简化后的表单 DOM HTML
+ * @param {number} elementCount - 可交互元素数量
  * @param {Array} memories - 记忆条目
  * @returns {Promise<string|null>} 用户输入的补充内容，null 表示取消
  */
-function showSupplementDialog(profile, simplifiedDOM, memories) {
+function showSupplementDialog(profile, simplifiedDOM, elementCount, memories) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
@@ -378,11 +390,8 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       overflowY: 'auto',
     });
 
-    // 从简化 DOM 中快速统计表单元素数量
-    const inputCount = (simplifiedDOM.match(/<input/g) || []).length;
-    const selectCount = (simplifiedDOM.match(/<select/g) || []).length + (simplifiedDOM.match(/role="combobox"/g) || []).length;
-    const textareaCount = (simplifiedDOM.match(/<textarea/g) || []).length;
-    const totalFields = inputCount + selectCount + textareaCount;
+    // 简化 DOM 模式下使用 elementCount
+    const totalFields = elementCount;
 
     // 估算 token 消耗（粗略：1 token ≈ 4 字符英文 / 1.5 字符中文）
     // 清洗画像数据：剔除 changeHistory / lastUpdated / id 等无用字段（与 prompt 实际发送一致）
@@ -395,18 +404,13 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
 
     previewInfo.innerHTML = `
       <div>Detected <strong>${totalFields}</strong> form fields</div>
-      <div style="margin-top:4px;color:#999">
-        ${inputCount > 0 ? `Inputs: ${inputCount}` : ''}
-        ${selectCount > 0 ? `${inputCount > 0 ? ' · ' : ''}Selects: ${selectCount}` : ''}
-        ${textareaCount > 0 ? `${(inputCount + selectCount) > 0 ? ' · ' : ''}Textareas: ${textareaCount}` : ''}
-      </div>
       <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e0e0e0;display:flex;align-items:center;gap:6px">
         <span style="color:#888">Est. Tokens:</span>
         <strong style="color:${totalEstTokens > 10000 ? '#e53935' : totalEstTokens > 5000 ? '#ff9800' : '#4caf50'}">${totalEstTokens.toLocaleString()}</strong>
         <span style="color:#bbb;font-size:11px">(DOM ${domTokens.toLocaleString()} + Profile ${profileTokens.toLocaleString()} + Memory ${memoriesTokens.toLocaleString()} + Template ${promptBaseTokens.toLocaleString()})</span>
       </div>
       ${totalEstTokens > 10000 ? '<div style="margin-top:4px;color:#e53935;font-size:11px">⚠️ High token count may incur higher costs. Check if the page has excessive content.</div>' : ''}
-      <div style="margin-top:4px;color:#999">AI will directly analyze form DOM structure to identify field meanings</div>
+      <div style="margin-top:4px;color:#999">AI analyzes simplified DOM HTML to identify and fill form fields</div>
     `;
     domPreview.appendChild(previewInfo);
     dialog.appendChild(domPreview);
@@ -863,7 +867,7 @@ function showAIResultBubble(fields) {
           color: '#888',
           flex: '1',
         });
-        label.textContent = field.label || field.selector || 'Unknown field';
+        label.textContent = field.label || `[Element #${field.id}]` || 'Unknown field';
 
         // 定位 icon 按钮
         const locateBtn = document.createElement('button');
@@ -893,7 +897,7 @@ function showAIResultBubble(fields) {
         });
         locateBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          highlightFormElement(field.selector, row);
+          highlightFormElement(field.id, field.selector, row);
         });
 
         labelRow.appendChild(label);
@@ -942,7 +946,7 @@ function showAIResultBubble(fields) {
           fontSize: '12px',
           color: '#999',
         });
-        row.textContent = `${field.label || field.selector}: Not filled`;
+        row.textContent = `${field.label || `[Element #${field.id}]`}: Not filled`;
         content.appendChild(row);
       });
     }
@@ -1028,29 +1032,36 @@ function showAIResultBubble(fields) {
  * @param {string} selector - CSS 选择器
  * @param {HTMLElement} row - 预览弹窗中的行元素（用于反馈状态）
  */
-function highlightFormElement(selector, row) {
+function highlightFormElement(fieldId, selector, row) {
   // 移除之前的高亮
   document.querySelectorAll('.form-helper-highlight').forEach(el => {
     el.classList.remove('form-helper-highlight');
   });
 
-  // 查找目标元素
+  // 优先通过 id 从 elementMap 直接获取元素
   let target = null;
-  try {
-    target = document.querySelector(selector);
-  } catch (e) { /* invalid selector */ }
-
-  // 备用查找（从 selector 中提取 name 或 id）
-  if (!target) {
-    const nameMatch = selector.match(/\[name=["']([^"']+)["']\]/);
-    if (nameMatch) {
-      target = document.querySelector(`[name="${CSS.escape(nameMatch[1])}"]`);
-    }
+  if (fieldId != null) {
+    const elementMap = getElementMap();
+    target = elementMap.get(Number(fieldId));
   }
-  if (!target) {
-    const idMatch = selector.match(/#([\w-]+)/);
-    if (idMatch) {
-      target = document.getElementById(idMatch[1]);
+
+  // 兜底：通过 CSS selector 查找
+  if (!target && selector) {
+    try {
+      target = document.querySelector(selector);
+    } catch (e) { /* invalid selector */ }
+
+    if (!target) {
+      const nameMatch = selector.match(/\[name=["']([^"']+)["']\]/);
+      if (nameMatch) {
+        target = document.querySelector(`[name="${CSS.escape(nameMatch[1])}"]`);
+      }
+    }
+    if (!target) {
+      const idMatch = selector.match(/#([\w-]+)/);
+      if (idMatch) {
+        target = document.getElementById(idMatch[1]);
+      }
     }
   }
 

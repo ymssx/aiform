@@ -65,9 +65,10 @@ expiresAt: If a memory has clear time relevance (e.g., "going to Guangzhou the d
 }
 
 /**
- * 智能融合填充 Prompt（DOM 分析版）
- * AI 直接分析简化后的表单 DOM HTML，返回带 CSS 选择器的填充指令
- * @param {string} simplifiedDOM - 简化后的表单区域 HTML
+ * 智能融合填充 Prompt（简化 HTML + data-fh-id 版）
+ * AI 直接分析简化后的表单 DOM HTML，通过 data-fh-id 属性定位元素
+ * 
+ * @param {string} simplifiedDOM - 简化后的表单 HTML（含 data-fh-id 标记）
  * @param {Object} userProfile - 用户画像
  * @param {Array} memories - 相关记忆条目
  * @param {string} userSupplement - 用户补充输入
@@ -81,9 +82,10 @@ export function buildFillPrompt(simplifiedDOM, userProfile, memories, userSupple
 
   // Quick mode: minimal prompt, skip detailed rules, let AI return results directly
   if (isQuickMode) {
-    return `Analyze the following form DOM, combine with user info, and directly return JSON fill instructions. Do not think, do not reason, output results directly.
+    return `Analyze the following form DOM HTML, combine with user info, and directly return JSON fill instructions. Do not think, do not reason, output results directly.
 
-## Form DOM
+## Form DOM HTML
+Each fillable element has a \`data-fh-id\` attribute (e.g. \`data-fh-id="3"\`). Use this ID in the "id" field of your response.
 \`\`\`html
 ${simplifiedDOM}
 \`\`\`
@@ -100,9 +102,9 @@ ${memories.length > 0 ? memories.map(m => `- ${m.content}`).join('\n') : 'None'}
 ${userSupplement?.includes?.('[AI_GENERATE]') ? '【MUST generate content for every field, NEVER return null】' : ''}
 
 ## Output Format (strict JSON)
-{"fields":[{"selector":"CSS selector","label":"field name","value":"value","type":"text|select|textarea|checkbox|radio","options":[]}],"updatedProfile":{},"newMemories":[],"changeLog":[]}
+{"fields":[{"id":1,"label":"field name","value":"value to fill","type":"text|select|textarea|checkbox|radio"}],"updatedProfile":{},"newMemories":[],"changeLog":[]}
 
-For selector, prefer [name], #id; fallback to precise CSS path. For select, value must be chosen from options.`;
+IMPORTANT: "id" must be the data-fh-id number from the HTML. For select, value must be chosen from <option> text. For radio/checkbox, fill the option's value or text.`;
   }
 
   // Standard mode: full detailed prompt
@@ -110,6 +112,8 @@ For selector, prefer [name], #id; fallback to precise CSS path. For select, valu
 
 ## Task
 Analyze the following form DOM HTML, understand the purpose of each field, and generate precise fill instructions based on user information.
+
+**IMPORTANT**: Each fillable element (input, select, textarea, etc.) has a \`data-fh-id\` attribute like \`data-fh-id="3"\`. You MUST use this ID number in your response to reference the element.
 
 ## Page Context
 URL/Title: ${pageContext || 'Unknown'}
@@ -130,21 +134,22 @@ ${memories.length > 0 ? memories.map(m => `- [${m.category}] ${m.content}${m.met
 
 ## DOM Analysis Rules
 1. Carefully read the DOM structure, identify every fillable form field (input, select, textarea, [role="textbox"], [role="combobox"], [contenteditable="true"], etc.)
-2. Understand field meaning through label, placeholder, name, id, and context text
-3. Labels may be:
+2. Each fillable element has a \`data-fh-id="N"\` attribute — this is the element's unique ID
+3. Understand field meaning through label, placeholder, name, id, and context text
+4. Labels may be:
    - <label> tags (associated via for attribute or wrapping relationship)
    - Text in <div>/<span> before/above the field
    - Elements with class names containing "label"
    - Component library label containers (e.g., .t-form__label, .ant-form-item-label, .el-form-item__label, .wg-component-label, etc.)
-4. For custom dropdowns (non-native <select>), identify available options through option list text in the DOM
+5. For native <select>, choose from its <option> elements
+6. For custom dropdowns (non-native <select>), identify available options through option list text in the DOM
 
 ## Fill Instruction Format
-Return an instruction object for each field that needs filling, containing:
-- **selector**: CSS selector to locate the element. Prefer [name="xxx"], #id, [data-id="xxx"] and other precise selectors; if the element lacks these attributes, use a sufficiently precise CSS selector path
-- **label**: The field's English label (extracted from DOM context)
+Return an instruction object for each field that needs filling:
+- **id**: The data-fh-id number from the DOM — **MUST match exactly**
+- **label**: The field's label (extracted from DOM context)
 - **value**: The value to fill
 - **type**: Field type (text/number/email/phone/date/select/textarea/checkbox/radio)
-- **options**: If select type, list available options (option text array extracted from DOM)
 
 ## Core Fill Rules
 1. **Priority**: User's current supplement > Related memories > User profile
@@ -163,11 +168,10 @@ Return an instruction object for each field that needs filling, containing:
 {
   "fields": [
     {
-      "selector": "CSS选择器",
-      "label": "字段中文标签",
-      "value": "填充值",
-      "type": "字段类型",
-      "options": ["选项1", "选项2"]
+      "id": 1,
+      "label": "field label",
+      "value": "value to fill",
+      "type": "field type"
     }
   ],
   "updatedProfile": {
@@ -178,7 +182,8 @@ Return an instruction object for each field that needs filling, containing:
     "education": { "school": "...", "major": "..." },
     "preferences": {},
     "custom": {}
-  },  "newMemories": [
+  },
+  "newMemories": [
     {
       "content": "New memory extracted from user supplement",
       "category": "intent|preference|fact|context",
@@ -190,7 +195,6 @@ Return an instruction object for each field that needs filling, containing:
     "Change description"
   ]
 }
-
 
 Current timestamp: ${Date.now()}`;
 }

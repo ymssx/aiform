@@ -1,14 +1,227 @@
 // ============================================
-// 表单 DOM 简化器
-// 检测表单区域，输出简化的 HTML 给 AI 分析
+// 表单提取器
+// 核心方案：提取简化 HTML + 为每个可交互元素分配 data-fh-id
+// AI 分析 HTML 理解表单结构，通过 data-fh-id 定位元素（不再依赖 CSS selector）
 // ============================================
 
+/** 可交互元素的 selector */
+const INTERACTIVE_SELECTOR = [
+  'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"])',
+  'textarea',
+  'select',
+  '[contenteditable="true"]',
+  '[role="textbox"]',
+  '[role="combobox"]',
+  '[role="listbox"]',
+  '[role="spinbutton"]',
+  '[role="slider"]',
+  '[role="switch"]',
+  '[role="searchbox"]',
+  '[role="radio"]',
+  '[role="checkbox"]',
+].join(',');
+
 /**
- * 从当前页面中提取简化的表单 DOM HTML
- * @param {number} maxLen - 最大 HTML 字符长度（防止 token 过多）
- * @returns {string} 简化后的 HTML 字符串
+ * 递归穿透 Shadow DOM 查找所有匹配 selector 的元素
+ * @param {Element|ShadowRoot|Document} root
+ * @param {string} selector
+ * @returns {Element[]}
  */
-export function extractSimplifiedFormDOM(maxLen = 15000) {
+function deepQuerySelectorAll(root, selector) {
+  const results = [];
+  // 在当前层级查找
+  try {
+    const found = root.querySelectorAll(selector);
+    results.push(...found);
+  } catch (e) {}
+  // 穿透 Shadow DOM
+  const allElements = root.querySelectorAll('*');
+  for (const el of allElements) {
+    if (el.shadowRoot) {
+      results.push(...deepQuerySelectorAll(el.shadowRoot, selector));
+    }
+  }
+  return results;
+}
+
+/**
+ * 提取简化 HTML + 元素映射表（主方案）
+ * 在简化 HTML 的同时，为每个可交互元素打上 data-fh-id="N" 标记
+ * 返回 HTML 字符串 + id→DOM Element 映射，AI 通过 data-fh-id 定位元素
+ * 
+ * @param {number} maxLen - 最大 HTML 字符长度
+ * @returns {{ html: string, elementMap: Map<number, HTMLElement>, elementCount: number }}
+ */
+export function extractFormDOMWithMapping(maxLen = 15000) {
+  // 先清除旧的 data-fh-id 标记
+  document.querySelectorAll('[data-fh-id]').forEach(el => el.removeAttribute('data-fh-id'));
+
+  // 为所有可交互元素打上 data-fh-id 标记，同时建立映射
+  const elementMap = new Map();
+  let nextId = 1;
+
+  // 使用多种方式查找可交互元素，确保不遗漏
+  // 策略1: 标准 querySelectorAll
+  const standardElements = document.querySelectorAll(INTERACTIVE_SELECTOR);
+  console.log(`[FormHelper] Strategy 1 - querySelectorAll: ${standardElements.length} elements`);
+  
+  // 策略2: 穿透 Shadow DOM 查找
+  const shadowElements = deepQuerySelectorAll(document, INTERACTIVE_SELECTOR);
+  console.log(`[FormHelper] Strategy 2 - deepQuerySelectorAll (Shadow DOM): ${shadowElements.length} elements`);
+
+  // 合并去重
+  const allInteractiveSet = new Set([...standardElements, ...shadowElements]);
+  
+  // 策略3: 检查 iframe（同源）
+  const iframes = document.querySelectorAll('iframe');
+  for (const iframe of iframes) {
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) continue;
+      const iframeInteractive = deepQuerySelectorAll(iframeDoc, INTERACTIVE_SELECTOR);
+      console.log(`[FormHelper] Strategy 3 - iframe(${iframe.src || 'inline'}): ${iframeInteractive.length} elements`);
+      iframeInteractive.forEach(el => allInteractiveSet.add(el));
+    } catch (e) { /* 跨域 iframe */ }
+  }
+
+  console.log(`[FormHelper] Total unique interactive elements found: ${allInteractiveSet.size}`);
+  
+  for (const el of allInteractiveSet) {
+    // 跳过真正隐藏的（display:none 且无尺寸的）
+    try {
+      const ownerDoc = el.ownerDocument;
+      const win = ownerDoc.defaultView || window;
+      const style = win.getComputedStyle(el);
+      if (style.display === 'none' && el.offsetWidth === 0 && el.offsetHeight === 0) continue;
+    } catch (e) {}
+    const id = nextId++;
+    el.setAttribute('data-fh-id', String(id));
+    elementMap.set(id, el);
+  }
+
+  console.log(`[FormHelper] Tagged ${elementMap.size} interactive elements with data-fh-id`);
+  if (elementMap.size > 0) {
+    console.log(`[FormHelper] First 5 elements:`, Array.from(elementMap.entries()).slice(0, 5).map(([id, el]) => {
+      const tag = el.tagName.toLowerCase();
+      const name = el.getAttribute('name') || '';
+      const type = el.getAttribute('type') || '';
+      const role = el.getAttribute('role') || '';
+      const placeholder = el.getAttribute('placeholder') || '';
+      return `[${id}] <${tag} name="${name}" type="${type}" role="${role}" placeholder="${placeholder.substring(0, 20)}">`;
+    }));
+  } else {
+    // 详细排查：打印页面上所有可能的表单相关元素
+    const allInputs = document.querySelectorAll('input, select, textarea');
+    const allRoles = document.querySelectorAll('[role]');
+    const allContentEditable = document.querySelectorAll('[contenteditable]');
+    const allShadowHosts = Array.from(document.querySelectorAll('*')).filter(el => el.shadowRoot);
+    
+    console.warn(`[FormHelper] ⚠️ No interactive elements matched INTERACTIVE_SELECTOR!`);
+    console.warn(`[FormHelper] 📊 Page stats:`);
+    console.warn(`  - input/select/textarea: ${allInputs.length}`);
+    console.warn(`  - [role] elements: ${allRoles.length}`);
+    console.warn(`  - [contenteditable]: ${allContentEditable.length}`);
+    console.warn(`  - Shadow DOM hosts: ${allShadowHosts.length}`);
+    
+    if (allInputs.length > 0) {
+      console.log(`[FormHelper] Raw input elements:`);
+      Array.from(allInputs).slice(0, 15).forEach((el, i) => {
+        const style = getComputedStyle(el);
+        console.log(`  [${i}] <${el.tagName.toLowerCase()} type="${el.getAttribute('type')||''}" name="${el.getAttribute('name')||''}" hidden=${el.type==='hidden'} display=${style.display} visible=${style.visibility}>`);
+      });
+    }
+    if (allRoles.length > 0) {
+      console.log(`[FormHelper] Role elements:`, Array.from(allRoles).slice(0, 10).map(el => `<${el.tagName.toLowerCase()} role="${el.getAttribute('role')}">`));
+    }
+    if (allShadowHosts.length > 0) {
+      console.log(`[FormHelper] Shadow DOM hosts:`, allShadowHosts.slice(0, 5).map(el => `<${el.tagName.toLowerCase()} class="${(el.className||'').toString().substring(0,40)}">`));
+    }
+  }
+
+  // 用已有的简化 DOM 逻辑提取 HTML（data-fh-id 会被自动保留，因为它在白名单中）
+  let html = _extractSimplifiedHTML(maxLen);
+  
+  // 验证：检查简化 HTML 中是否包含 data-fh-id
+  const fhIdCount = (html.match(/data-fh-id/g) || []).length;
+  console.log(`[FormHelper] Simplified HTML contains ${fhIdCount} data-fh-id markers (${html.length} chars)`);
+  
+  // 如果标记了元素但 HTML 中没有 data-fh-id，说明 simplifyDOM 把它们过滤掉了
+  // 这时直接用 document.body 重新提取
+  if (elementMap.size > 0 && fhIdCount === 0) {
+    console.warn(`[FormHelper] simplifyDOM filtered out all tagged elements! Retrying with document.body...`);
+    html = simplifyDOM(document.body);
+    if (html.length > maxLen) {
+      html = html.substring(0, maxLen) + '\n<!-- ... 内容过长已截断 -->';
+    }
+    const retryCount = (html.match(/data-fh-id/g) || []).length;
+    console.log(`[FormHelper] Retry with body: ${retryCount} data-fh-id markers (${html.length} chars)`);
+  }
+
+  // 提取完成后清除 DOM 上的标记（不留痕迹）
+  // 清理主文档 + Shadow DOM + iframe 中的标记
+  const cleanFhId = (root) => {
+    try {
+      root.querySelectorAll('[data-fh-id]').forEach(el => el.removeAttribute('data-fh-id'));
+      root.querySelectorAll('*').forEach(el => {
+        if (el.shadowRoot) cleanFhId(el.shadowRoot);
+      });
+    } catch (e) {}
+  };
+  cleanFhId(document);
+  document.querySelectorAll('iframe').forEach(iframe => {
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (iframeDoc) cleanFhId(iframeDoc);
+    } catch (e) {}
+  });
+
+  return { html, elementMap, elementCount: elementMap.size };
+}
+
+/**
+ * 带重试的表单 DOM + 映射提取（支持 SPA 动态渲染）
+ * @param {number} maxWaitMs
+ * @returns {Promise<{ html: string, elementMap: Map<number, HTMLElement>, elementCount: number }>}
+ */
+export function extractFormDOMWithMappingRetry(maxWaitMs = 2000) {
+  return new Promise((resolve) => {
+    const result = extractFormDOMWithMapping();
+    if (result.elementCount > 0) {
+      resolve(result);
+      return;
+    }
+
+    let resolved = false;
+    const observer = new MutationObserver(() => {
+      if (resolved) return;
+      const retryResult = extractFormDOMWithMapping();
+      if (retryResult.elementCount > 0) {
+        resolved = true;
+        observer.disconnect();
+        resolve(retryResult);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'hidden', 'aria-hidden'],
+    });
+
+    setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      observer.disconnect();
+      resolve(extractFormDOMWithMapping());
+    }, maxWaitMs);
+  });
+}
+
+/**
+ * 内部方法：提取简化 HTML（被 extractFormDOMWithMapping 调用）
+ */
+function _extractSimplifiedHTML(maxLen = 15000) {
   const regions = detectFormRegions();
 
   let html = '';
@@ -41,40 +254,7 @@ export function extractSimplifiedFormDOM(maxLen = 15000) {
  * @param {number} maxWaitMs - 最长等待毫秒数
  * @returns {Promise<string>}
  */
-export function extractSimplifiedFormDOMWithRetry(maxWaitMs = 2000) {
-  return new Promise((resolve) => {
-    const html = extractSimplifiedFormDOM();
-    if (html && html.trim().length > 100) {
-      resolve(html);
-      return;
-    }
-
-    let resolved = false;
-    const observer = new MutationObserver(() => {
-      if (resolved) return;
-      const retryHtml = extractSimplifiedFormDOM();
-      if (retryHtml && retryHtml.trim().length > 100) {
-        resolved = true;
-        observer.disconnect();
-        resolve(retryHtml);
-      }
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['style', 'class', 'hidden', 'aria-hidden'],
-    });
-
-    setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      observer.disconnect();
-      resolve(extractSimplifiedFormDOM());
-    }, maxWaitMs);
-  });
-}
+// extractSimplifiedFormDOMWithRetry 已被 extractFormDOMWithMappingRetry 取代
 
 // ============================================
 // DOM 简化器核心逻辑
@@ -85,6 +265,7 @@ const KEEP_ATTRS = new Set([
   'name', 'id', 'type', 'value', 'placeholder', 'for',
   'role', 'aria-label', 'aria-labelledby', 'aria-describedby',
   'data-id', 'data-name', 'data-field', 'data-key',
+  'data-fh-id', // 表单元素唯一标识，供 AI 返回填充指令时引用
   'checked', 'selected', 'disabled', 'readonly', 'required',
   'maxlength', 'minlength', 'min', 'max', 'step', 'pattern',
   'multiple', 'contenteditable',
@@ -269,11 +450,17 @@ function _simplifyClass(classStr, tagName) {
 function _isRelevantVisible(node) {
   // aria-hidden 的元素通常不需要
   if (node.getAttribute('aria-hidden') === 'true') {
-    // 但如果内部有表单元素，仍然保留
-    if (!node.querySelector('input, select, textarea, [role="textbox"], [role="combobox"]')) {
+    // 但如果内部有表单元素或已标记元素，仍然保留
+    if (!node.querySelector('input, select, textarea, [role="textbox"], [role="combobox"], [data-fh-id]')) {
       return false;
     }
   }
+
+  // 如果节点本身有 data-fh-id，始终保留（它是被标记的可交互元素）
+  if (node.hasAttribute('data-fh-id')) return true;
+
+  // 如果节点内部包含有 data-fh-id 的元素，必须保留容器
+  if (node.querySelector('[data-fh-id]')) return true;
 
   try {
     const style = getComputedStyle(node);
@@ -285,9 +472,12 @@ function _isRelevantVisible(node) {
       if (node.querySelector('input, select, textarea')) return true;
       return false;
     }
-    // visibility:hidden 和 opacity:0 的元素跳过
+    // visibility:hidden 和 opacity:0：对容器节点不再跳过
+    // 因为很多组件库会给外层容器设置这些属性，但内部的 input 仍然是可交互的
+    // 只对叶子元素（无子元素）进行严格检查
     if (style.visibility === 'hidden' || style.opacity === '0') {
-      return false;
+      if (node.children.length === 0) return false;
+      // 容器节点：不跳过，继续遍历子节点
     }
   } catch (e) {
     // getComputedStyle 可能对 detached 节点失败，默认保留

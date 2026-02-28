@@ -68,7 +68,7 @@ async function handleMessage(message, sender) {
       return { success: true, data: { profile, memories } };
     }
 
-    // ========== 执行 AI 融合填充（DOM 分析版）==========
+    // ========== 执行 AI 融合填充（简化 HTML + data-fh-id 版）==========
     case MSG.EXECUTE_FILL: {
       const { simplifiedDOM, userSupplement, pageContext, domain } = data;
       const profile = await getProfile();
