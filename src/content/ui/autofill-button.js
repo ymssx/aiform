@@ -30,30 +30,112 @@ export function createAutoFillButton() {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    cursor: 'pointer',
+    cursor: 'grab',
     boxShadow: '0 4px 15px rgba(102,126,234,0.4)',
     zIndex: '2147483646',
-    transition: 'all 0.3s ease',
-    fontSize: '22px',
+    transition: 'box-shadow 0.3s ease, transform 0.2s ease',
+    fontSize: '24px',
     userSelect: 'none',
   });
-  floatingBtn.textContent = '📝';
-  floatingBtn.title = 'AI 自动填写表单';
+  floatingBtn.textContent = '✨';
+  floatingBtn.title = 'AI Auto-fill Form (drag to move)';
 
   // Hover 效果
   floatingBtn.addEventListener('mouseenter', () => {
-    floatingBtn.style.transform = 'scale(1.1)';
-    floatingBtn.style.boxShadow = '0 6px 20px rgba(102,126,234,0.6)';
+    if (!floatingBtn._dragging) {
+      floatingBtn.style.transform = 'scale(1.1)';
+      floatingBtn.style.boxShadow = '0 6px 25px rgba(102,126,234,0.6)';
+    }
   });
   floatingBtn.addEventListener('mouseleave', () => {
-    floatingBtn.style.transform = 'scale(1)';
-    floatingBtn.style.boxShadow = '0 4px 15px rgba(102,126,234,0.4)';
+    if (!floatingBtn._dragging) {
+      floatingBtn.style.transform = 'scale(1)';
+      floatingBtn.style.boxShadow = '0 4px 15px rgba(102,126,234,0.4)';
+    }
   });
 
-  // 点击事件
-  floatingBtn.addEventListener('click', handleAutoFillClick);
+  // 拖动功能
+  setupDrag(floatingBtn);
 
+  // 点击事件（在 setupDrag 中通过判断拖动距离来区分点击/拖动）
   document.body.appendChild(floatingBtn);
+}
+
+/**
+ * 设置浮动按钮的拖动功能
+ * 通过判断拖动距离来区分点击和拖动操作
+ */
+function setupDrag(el) {
+  let startX, startY, initialLeft, initialTop;
+  let isDragging = false;
+  const DRAG_THRESHOLD = 5; // 拖动阈值（像素），小于此值视为点击
+
+  el.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startY = e.clientY;
+
+    // 记录当前按钮位置（转换为 left/top 定位）
+    const rect = el.getBoundingClientRect();
+    initialLeft = rect.left;
+    initialTop = rect.top;
+
+    isDragging = false;
+    el._dragging = false;
+    el.style.cursor = 'grabbing';
+    el.style.transition = 'box-shadow 0.3s ease'; // 拖动时关闭 transform 动画
+
+    const onMouseMove = (e) => {
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!isDragging && Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
+        isDragging = true;
+        el._dragging = true;
+        // 切换为 left/top 定位
+        el.style.left = initialLeft + 'px';
+        el.style.top = initialTop + 'px';
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+        el.style.boxShadow = '0 8px 30px rgba(102,126,234,0.5)';
+      }
+
+      if (isDragging) {
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        // 限制在窗口范围内
+        const maxLeft = window.innerWidth - el.offsetWidth;
+        const maxTop = window.innerHeight - el.offsetHeight;
+        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+        newTop = Math.max(0, Math.min(newTop, maxTop));
+
+        el.style.left = newLeft + 'px';
+        el.style.top = newTop + 'px';
+      }
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      el.style.cursor = 'grab';
+      el.style.transition = 'box-shadow 0.3s ease, transform 0.2s ease';
+      el.style.boxShadow = '0 4px 15px rgba(102,126,234,0.4)';
+
+      if (!isDragging) {
+        // 视为点击
+        handleAutoFillClick();
+      }
+      // 延迟重置拖动状态，防止 mouseleave 触发 scale
+      setTimeout(() => { el._dragging = false; }, 50);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  // 阻止默认拖拽行为
+  el.addEventListener('dragstart', (e) => e.preventDefault());
 }
 
 /**
@@ -179,8 +261,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       gap: '8px',
     });
     header.innerHTML = `
-      <span style="font-size:20px">🤖</span>
-      <span style="font-weight:600;font-size:15px">AI 自动填写</span>
+      <span style="font-weight:600;font-size:15px">AI Auto-fill</span>
     `;
     dialog.appendChild(header);
 
@@ -199,7 +280,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       color: '#333',
       marginBottom: '8px',
     });
-    infoTitle.textContent = '📋 已有信息（来自历史记录）';
+      infoTitle.textContent = 'Available Info (from history)';
     infoSection.appendChild(infoTitle);
 
     const infoContent = document.createElement('div');
@@ -214,7 +295,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
     const profileSummary = buildProfileSummary(profile);
     if (profileSummary.length > 0) {
       infoContent.innerHTML = profileSummary.map(item =>
-        `<div><span style="color:#999;min-width:70px;display:inline-block">${item.label}:</span> <span style="color:#333">${item.value}</span></div>`
+        `<div style="margin-bottom:4px"><div style="color:#999;font-size:11px">${item.label}</div><div style="color:#333;padding:2px 0">${item.value}</div></div>`
       ).join('');
     } else {
       infoContent.innerHTML = '<div style="color:#999">暂无历史数据，请在下方补充您的信息</div>';
@@ -238,7 +319,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
         color: '#333',
         marginBottom: '6px',
       });
-      memTitle.textContent = '🧠 AI 记忆（将智能关联到表单字段）';
+      memTitle.textContent = 'AI Memory (auto-linked to form fields)';
       memSection.appendChild(memTitle);
 
       const memList = document.createElement('div');
@@ -250,9 +331,9 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
         overflowY: 'auto',
       });
 
-      const categoryIcons = { intent: '🎯', preference: '💡', fact: '📌', context: '🔄' };
+      const categoryIcons = { intent: '▸', preference: '▸', fact: '▸', context: '▸' };
       memories.slice(0, 10).forEach(m => {
-        const icon = categoryIcons[m.category] || '📝';
+        const icon = categoryIcons[m.category] || '▸';
         const div = document.createElement('div');
         div.textContent = `${icon} ${m.content}`;
         if (m.expiresAt) {
@@ -313,14 +394,14 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
     const totalEstTokens = domTokens + profileTokens + memoriesTokens + promptBaseTokens;
 
     previewInfo.innerHTML = `
-      <div>📝 检测到 <strong>${totalFields}</strong> 个表单字段</div>
+      <div>Detected <strong>${totalFields}</strong> form fields</div>
       <div style="margin-top:4px;color:#999">
         ${inputCount > 0 ? `输入框 ${inputCount} 个` : ''}
         ${selectCount > 0 ? `${inputCount > 0 ? ' · ' : ''}下拉框 ${selectCount} 个` : ''}
         ${textareaCount > 0 ? `${(inputCount + selectCount) > 0 ? ' · ' : ''}文本域 ${textareaCount} 个` : ''}
       </div>
       <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e0e0e0;display:flex;align-items:center;gap:6px">
-        <span style="color:#888">🔢 预计消耗 Token：</span>
+        <span style="color:#888">Est. Tokens：</span>
         <strong style="color:${totalEstTokens > 10000 ? '#e53935' : totalEstTokens > 5000 ? '#ff9800' : '#4caf50'}">${totalEstTokens.toLocaleString()}</strong>
         <span style="color:#bbb;font-size:11px">(DOM ${domTokens.toLocaleString()} + 画像 ${profileTokens.toLocaleString()} + 记忆 ${memoriesTokens.toLocaleString()} + 模板 ${promptBaseTokens.toLocaleString()})</span>
       </div>
@@ -344,7 +425,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       color: '#333',
       marginBottom: '8px',
     });
-    inputTitle.textContent = '📝 补充或修改信息（自然语言输入）';
+    inputTitle.textContent = 'Supplement or modify info (natural language)';
     inputSection.appendChild(inputTitle);
 
     // AI 智能生成开关
@@ -388,13 +469,13 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
     toggleCheckbox.appendChild(toggleDot);
 
     const toggleLabel = document.createElement('div');
-    toggleLabel.innerHTML = '<span style="font-size:13px;font-weight:600;color:#333">✨ AI 智能生成</span><br><span style="font-size:11px;color:#888">开启后，AI 会为没有历史数据的字段生成合理的模拟内容</span>';
+    toggleLabel.innerHTML = '<span style="font-size:13px;font-weight:600;color:#333">AI Smart Generate</span><br><span style="font-size:11px;color:#888">When enabled, AI generates realistic mock data for empty fields</span>';
 
     generateToggle.appendChild(toggleCheckbox);
     generateToggle.appendChild(toggleLabel);
     generateToggle.addEventListener('click', () => {
       aiGenerateEnabled = !aiGenerateEnabled;
-      toggleCheckbox.style.background = aiGenerateEnabled ? '#667eea' : '#ccc';
+    toggleCheckbox.style.background = aiGenerateEnabled ? '#667eea' : '#ccc';
       toggleDot.style.left = aiGenerateEnabled ? '18px' : '2px';
       generateToggle.style.background = aiGenerateEnabled ? '#f8f0ff' : '#f5f5f5';
       generateToggle.style.borderColor = aiGenerateEnabled ? '#e8d5f5' : '#ddd';
@@ -458,7 +539,7 @@ function showSupplementDialog(profile, simplifiedDOM, memories) {
       fontSize: '13px',
       fontWeight: '600',
     });
-    confirmBtn.textContent = '🚀 确认填写';
+    confirmBtn.textContent = 'Confirm Fill';
     confirmBtn.addEventListener('click', () => {
       overlay.remove();
       let supplement = textarea.value.trim();
@@ -598,7 +679,7 @@ function showLoadingOverlay() {
     fontWeight: '600',
     color: '#333',
   });
-  text.textContent = '🤖 AI 正在分析表单...';
+  text.textContent = 'AI is analyzing the form...';
 
   const subText = document.createElement('div');
   Object.assign(subText.style, {
@@ -661,10 +742,9 @@ function showAIResultBubble(fields) {
       gap: '10px',
     });
     header.innerHTML = `
-      <span style="font-size:22px">🤖</span>
       <div>
-        <div style="font-weight:600;font-size:15px">AI 填充方案</div>
-        <div style="font-size:11px;opacity:0.85">以下是 AI 推荐的填充内容，确认后将自动填入表单</div>
+        <div style="font-weight:600;font-size:15px">AI Fill Plan</div>
+        <div style="font-size:11px;opacity:0.85">Review below, then confirm to auto-fill the form</div>
       </div>
     `;
     bubble.appendChild(header);
@@ -686,22 +766,19 @@ function showAIResultBubble(fields) {
         const row = document.createElement('div');
         Object.assign(row.style, {
           display: 'flex',
-          alignItems: 'flex-start',
-          padding: '10px 12px',
+          flexDirection: 'column',
+          padding: '8px 12px',
           background: idx % 2 === 0 ? '#f8f9ff' : '#fff',
           borderRadius: '8px',
           marginBottom: '4px',
-          gap: '12px',
+          gap: '4px',
         });
 
         const label = document.createElement('div');
         Object.assign(label.style, {
-          minWidth: '90px',
-          fontSize: '13px',
+          fontSize: '11px',
           fontWeight: '600',
-          color: '#555',
-          paddingTop: '2px',
-          flexShrink: '0',
+          color: '#888',
         });
         label.textContent = field.label || field.selector || '未知字段';
 
@@ -709,13 +786,13 @@ function showAIResultBubble(fields) {
         Object.assign(val.style, {
           fontSize: '13px',
           color: '#333',
-          flex: '1',
           wordBreak: 'break-all',
           lineHeight: '1.5',
-          padding: '2px 8px',
+          padding: '4px 8px',
           background: '#e8f5e9',
           borderRadius: '4px',
           border: '1px solid #c8e6c9',
+          minHeight: '24px',
         });
         val.textContent = String(field.value);
 

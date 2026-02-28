@@ -31,8 +31,8 @@
       gap: 10px;
     }
     .header-icon { font-size: 24px; }
-    .header-title { font-size: 16px; font-weight: 600; }
-    .header-sub { font-size: 11px; opacity: 0.8; }
+    .header-title { font-size: 16px; font-weight: 600; color: #fff; }
+    .header-sub { font-size: 11px; color: rgba(255,255,255,0.8); }
 
     /* Tab 导航 */
     .tabs {
@@ -67,7 +67,7 @@
     }
     .form-label {
       display: block;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       color: #555;
       margin-bottom: 4px;
@@ -155,22 +155,21 @@
       font-size: 12px;
       margin-bottom: 12px;
     }
-    .status-ok { background: #e8f5e9; color: #2e7d32; }
+    .status-ok { background: #ede7f6; color: #5e35b1; }
     .status-warn { background: #fff3e0; color: #e65100; }
 
     /* 用户画像 */
     .profile-section {
-      background: #fff;
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      padding: 4px 0 8px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid #f0f0f0;
     }
+    .profile-section:last-child { border-bottom: none; }
     .profile-title {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
-      color: #667eea;
-      margin-bottom: 8px;
+      color: #555;
+      margin-bottom: 6px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -191,20 +190,18 @@
     }
     .profile-edit-row {
       display: flex;
-      align-items: center;
-      padding: 3px 0;
-      gap: 8px;
+      flex-direction: column;
+      padding: 4px 0;
+      gap: 3px;
     }
     .profile-edit-label {
-      font-size: 12px;
+      font-size: 11px;
       color: #999;
-      min-width: 60px;
-      flex-shrink: 0;
-      text-align: right;
+      font-weight: 500;
     }
     .profile-edit-input {
-      flex: 1;
-      padding: 5px 8px;
+      width: 100%;
+      padding: 6px 8px;
       border: 1px solid #e8e8e8;
       border-radius: 4px;
       font-size: 12px;
@@ -212,6 +209,7 @@
       outline: none;
       transition: border-color 0.2s;
       background: #fafafa;
+      box-sizing: border-box;
     }
     .profile-edit-input:focus {
       border-color: #667eea;
@@ -229,12 +227,10 @@
 
     /* 历史记录列表 */
     .record-item {
-      background: #fff;
-      border-radius: 8px;
-      padding: 10px 12px;
-      margin-bottom: 8px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
     }
+    .record-item:last-child { border-bottom: none; }
     .record-name {
       font-weight: 600;
       font-size: 13px;
@@ -252,6 +248,245 @@
       font-size: 12px;
     }
     .record-delete:hover { text-decoration: underline; }
+
+    /* 记录操作按钮 */
+    .record-actions {
+      float: right;
+      display: flex;
+      gap: 6px;
+    }
+    .record-action {
+      cursor: pointer;
+      font-size: 14px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    .record-action:hover { opacity: 1; }
+
+    /* 记录详情样式 */
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .detail-back {
+      cursor: pointer;
+      color: #667eea;
+      font-size: 13px;
+      font-weight: 600;
+      transition: color 0.2s;
+    }
+    .detail-back:hover { color: #5a6fd6; }
+    .detail-mode {
+      font-size: 12px;
+      color: #999;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #f5f5f7;
+    }
+    .detail-section {
+      padding: 8px 0;
+      margin-bottom: 4px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .detail-section:last-child { border-bottom: none; }
+    .detail-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .detail-row {
+      display: flex;
+      flex-direction: column;
+      padding: 4px 0;
+      font-size: 12px;
+      gap: 3px;
+    }
+    .detail-label {
+      color: #999;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .detail-value {
+      color: #333;
+      word-break: break-word;
+      min-height: 20px;
+    }
+    .detail-input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #333;
+      outline: none;
+      transition: border-color 0.2s;
+      background: #fafafa;
+      box-sizing: border-box;
+    }
+    .detail-input:focus {
+      border-color: #667eea;
+      background: #fff;
+    }
+    .detail-field-row {
+      padding: 6px 0;
+      border-bottom: 1px solid #f2f2f2;
+    }
+    .detail-field-row:last-child { border-bottom: none; }
+    .detail-field-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .detail-field-label-tag {
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+    }
+    .detail-field-category {
+      font-size: 10px;
+      color: #667eea;
+      background: #ede7f6;
+      padding: 1px 6px;
+      border-radius: 8px;
+    }
+    .detail-field-value-text {
+      font-size: 12px;
+      color: #555;
+      padding: 4px 8px;
+      word-break: break-word;
+      min-height: 24px;
+      line-height: 1.5;
+      background: #f9f9f9;
+      border-radius: 4px;
+    }
+    .detail-url {
+      font-size: 11px;
+      color: #4CAF50;
+      word-break: break-all;
+      line-height: 1.5;
+    }
+
+    /* ========== 三分类信息汇总视图 ========== */
+    .info-category {
+      margin-bottom: 6px;
+    }
+    .info-category-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 0;
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid #eee;
+    }
+    .info-category-header:hover {
+      opacity: 0.8;
+    }
+    .info-category-icon {
+      color: #667eea;
+      display: flex;
+      align-items: center;
+    }
+    .info-category-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+    }
+    .info-category-desc {
+      font-size: 11px;
+      color: #999;
+      margin-left: auto;
+    }
+    .info-category-toggle {
+      font-size: 12px;
+      color: #999;
+      margin-left: 4px;
+      transition: transform 0.2s;
+    }
+    .info-category-body {
+      padding: 6px 0;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+      overflow: hidden;
+    }
+    .info-category-body.collapsed {
+      max-height: 0 !important;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    /* ========== 记忆卡片样式 ========== */
+    .memory-card {
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .memory-card:last-child {
+      border-bottom: none;
+    }
+    .memory-card.memory-expired {
+      opacity: 0.5;
+      border-left-color: #ccc;
+    }
+    .memory-card-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .memory-card-category {
+      font-size: 11px;
+      font-weight: 500;
+      color: #666;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .memory-card-time {
+      font-size: 10px;
+      color: #bbb;
+      margin-left: auto;
+    }
+    .memory-delete {
+      font-size: 12px;
+      color: #ccc;
+      cursor: pointer;
+      padding: 0 2px;
+      transition: color 0.2s;
+    }
+    .memory-delete:hover { color: #f44336; }
+    .memory-card-content {
+      font-size: 13px;
+      color: #333;
+      line-height: 1.5;
+      margin: 4px 0;
+    }
+    .memory-card-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .memory-card-expires {
+      font-size: 10px;
+      color: #999;
+    }
+    .memory-card-expires.expired {
+      color: #f44336;
+      text-decoration: line-through;
+    }
+    .memory-card-domain {
+      font-size: 10px;
+      color: #667eea;
+      background: #ede7f6;
+      padding: 1px 6px;
+      border-radius: 8px;
+    }
 
     /* 预设按钮 */
     .preset-btns {
@@ -272,7 +507,7 @@
     .preset-btn:hover {
       border-color: #667eea;
       color: #667eea;
-      background: #f0f2ff;
+      background: #ede7f6;
     }
     .preset-btn.active {
       border-color: #667eea;
@@ -299,7 +534,7 @@
 
   <!-- 头部 -->
   <div class="header">
-    <span class="header-icon">🤖</span>
+    <span class="header-icon" id="header-icon"></span>
     <div>
       <div class="header-title">AI Form Helper</div>
       <div class="header-sub">Smart Extract · Auto Fill</div>
@@ -308,10 +543,10 @@
 
   <!-- Tab 导航 -->
   <div class="tabs">
-    <div class="tab active" data-tab="settings">⚙️ Settings</div>
-    <div class="tab" data-tab="profile">👤 Profile</div>
-    <div class="tab" data-tab="history">📋 History</div>
-    <div class="tab" data-tab="about">ℹ️ About</div>  </div>
+    <div class="tab active" data-tab="settings"><span id="tab-icon-settings"></span> Settings</div>
+    <div class="tab" data-tab="profile"><span id="tab-icon-profile"></span> Profile</div>
+    <div class="tab" data-tab="history"><span id="tab-icon-history"></span> History</div>
+    <div class="tab" data-tab="about"><span id="tab-icon-about"></span> About</div>  </div>
 
   <!-- Settings Tab -->
   <div id="tab-settings" class="tab-content active">
@@ -319,12 +554,12 @@
 
     <!-- 模型预设快捷选择 -->
     <div class="form-group">
-      <label class="form-label">🚀 Quick Presets (click to auto-fill endpoint and model)</label>
+      <label class="form-label">Quick Presets (click to auto-fill endpoint and model)</label>
       <div class="preset-btns">
-        <button class="preset-btn" data-endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1" data-model="qwen-plus" data-placeholder="sk-...">Qwen</button>
-        <button class="preset-btn" data-endpoint="https://api.deepseek.com/v1" data-model="deepseek-chat" data-placeholder="sk-...">DeepSeek</button>
-        <button class="preset-btn" data-endpoint="https://api.openai.com/v1" data-model="gpt-4o-mini" data-placeholder="sk-...">OpenAI</button>
-        <button class="preset-btn" data-endpoint="http://localhost:11434/v1" data-model="qwen2.5:7b" data-placeholder="ollama">Ollama Local</button>
+        <button class="preset-btn" data-endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1" data-model="qwen-plus" data-placeholder="sk-..." data-keyurl="https://bailian.console.aliyun.com/?apiKey=1#/api-key">Qwen</button>
+        <button class="preset-btn" data-endpoint="https://api.deepseek.com/v1" data-model="deepseek-chat" data-placeholder="sk-..." data-keyurl="https://platform.deepseek.com/api_keys">DeepSeek</button>
+        <button class="preset-btn" data-endpoint="https://api.openai.com/v1" data-model="gpt-4o-mini" data-placeholder="sk-..." data-keyurl="https://platform.openai.com/api-keys">OpenAI</button>
+        <button class="preset-btn" data-endpoint="http://localhost:11434/v1" data-model="qwen2.5:7b" data-placeholder="ollama" data-keyurl="">Ollama Local</button>
       </div>
     </div>
 
@@ -342,6 +577,9 @@
     <div class="form-group">
       <label class="form-label">API Key</label>
       <input id="apiKey" class="form-input" type="password" placeholder="sk-...">
+      <div id="apiKeyLink" class="form-hint" style="display:none; margin-top:4px;">
+        <a id="apiKeyLinkAnchor" href="#" target="_blank" style="color:#667eea; text-decoration:none; font-weight:500;">Get API Key →</a>
+      </div>
     </div>
 
     <div class="switch-row">
@@ -352,14 +590,25 @@
       </label>
     </div>
 
+    <div class="switch-row">
+      <div>
+        <span class="switch-label">⚡ Quick Mode</span>
+        <div class="form-hint" style="margin-top:2px">Skip AI reasoning for faster response, may reduce accuracy</div>
+      </div>
+      <label class="switch">
+        <input id="quickMode" type="checkbox">
+        <span class="slider"></span>
+      </label>
+    </div>
+
     <div class="form-group" style="margin-top:10px">
       <label class="form-label">Domain Whitelist (leave empty = all websites)</label>
       <input id="enabledDomains" class="form-input" type="text" placeholder="example.com, test.com">
       <div class="form-hint">Separate multiple domains with commas</div>
     </div>
 
-    <button id="saveConfigBtn" class="btn btn-primary">💾 Save Settings</button>
-    <button id="clearAllBtn" class="btn btn-danger">🗑️ Clear All Data</button>
+    <button id="saveConfigBtn" class="btn btn-primary"><span id="btn-icon-save"></span> Save Settings</button>
+    <button id="clearAllBtn" class="btn btn-danger"><span id="btn-icon-trash"></span> Clear All Data</button>
   </div>
 
   <!-- Profile Tab -->
@@ -379,7 +628,7 @@
   <!-- About Tab -->
   <div id="tab-about" class="tab-content">
     <div style="text-align:center; padding:20px 10px;">
-      <div style="font-size:48px; margin-bottom:8px;">🤖</div>
+      <div style="margin-bottom:8px;color:#667eea" id="about-logo"></div>
       <div style="font-size:18px; font-weight:700; color:#333;">AI Form Helper</div>
       <div style="font-size:12px; color:#999; margin-top:4px;">v1.0.0</div>
       <div style="font-size:13px; color:#666; margin-top:16px; line-height:1.6;">
@@ -388,7 +637,7 @@
     </div>
 
     <div style="background:#fff; border-radius:8px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;">✨ Features</div>
+      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;display:flex;align-items:center;gap:6px"><span id="about-icon-features"></span> Features</div>
       <ul style="font-size:12px; color:#555; line-height:1.8; padding-left:18px; margin:0;">
         <li><b>Smart Fill</b> — AI analyzes DOM to auto-fill forms with profile data & memories</li>
         <li><b>Data Extraction</b> — Captures form submissions and builds structured user profiles</li>
@@ -399,7 +648,7 @@
     </div>
 
     <div style="background:#fff; border-radius:8px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;">📦 Tech Stack</div>
+      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;display:flex;align-items:center;gap:6px"><span id="about-icon-tech"></span> Tech Stack</div>
       <div style="font-size:12px; color:#555; line-height:1.8;">
         <div>• Chrome Extension Manifest V3</div>
         <div>• Vanilla JavaScript (no framework dependency)</div>
@@ -409,15 +658,15 @@
     </div>
 
     <div style="background:#fff; border-radius:8px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;">🔗 Links</div>
+      <div style="font-size:13px; font-weight:600; color:#667eea; margin-bottom:10px;display:flex;align-items:center;gap:6px"><span id="about-icon-links"></span> Links</div>
       <div style="font-size:12px; color:#555; line-height:2;">
-        <div>📄 <a href="#" id="about-readme-link" style="color:#667eea; text-decoration:none;">View README on GitHub</a></div>
-        <div>🐛 <a href="#" id="about-issues-link" style="color:#667eea; text-decoration:none;">Report an Issue</a></div>
+        <div><a href="https://github.com/ymssx/aiform" target="_blank" style="color:#667eea; text-decoration:none;">View README on GitHub</a></div>
+        <div><a href="https://github.com/ymssx/aiform/issues" target="_blank" style="color:#667eea; text-decoration:none;">Report an Issue</a></div>
       </div>
     </div>
 
     <div style="text-align:center; font-size:11px; color:#bbb; margin-top:16px;">
-      Made with ❤️ · MIT License · © 2024-2026
+      Made with <span style="color:#f44336">♥</span> · MIT License · © 2024-2026
     </div>
   </div>
 

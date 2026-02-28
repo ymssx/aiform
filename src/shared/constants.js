@@ -24,6 +24,8 @@ export const MSG = {
   GET_RECORDS: 'GET_RECORDS',
   // 删除记录
   DELETE_RECORD: 'DELETE_RECORD',
+  // 更新记录
+  UPDATE_RECORD: 'UPDATE_RECORD',
   // 清空所有数据
   CLEAR_ALL: 'CLEAR_ALL',
   // 记忆系统
@@ -51,6 +53,7 @@ export const DEFAULT_CONFIG = {
   apiKey: '',
   autoDetect: true,
   enabledDomains: [],
+  quickMode: false,
 };
 
 /** 默认用户画像 */

@@ -55,8 +55,8 @@ export async function mergeProfile(updatedProfile, changeLog, source) {
   // 地址合并（按label去重，新的覆盖旧的）
   if (updatedProfile.addresses && updatedProfile.addresses.length > 0) {
     const addrMap = new Map();
-    (current.addresses || []).forEach(a => addrMap.set(a.label || '默认地址', a));
-    updatedProfile.addresses.forEach(a => addrMap.set(a.label || '默认地址', a));
+    (current.addresses || []).forEach(a => addrMap.set(a.label || 'Default Address', a));
+    updatedProfile.addresses.forEach(a => addrMap.set(a.label || 'Default Address', a));
     merged.addresses = Array.from(addrMap.values());
   }
 
@@ -78,8 +78,19 @@ export async function mergeProfile(updatedProfile, changeLog, source) {
 
 /** ========== 记忆系统管理 ========== */
 
+/** 默认过期天数（如果 AI 未指定 expiresAt） */
+const DEFAULT_EXPIRE_DAYS = {
+  intent: 7,     // 计划/意图：7 天后过期
+  context: 3,    // 临时上下文：3 天后过期
+  preference: null, // 偏好：永不过期
+  fact: null,       // 事实：永不过期
+};
+
+/** 记忆容量上限 */
+const MAX_MEMORIES = 200;
+
 /**
- * 获取所有记忆条目
+ * 获取所有记忆条目（自动淘汰过期记忆）
  * @param {string} [domain] - 可选，按域名过滤
  */
 export async function getMemories(domain) {
@@ -92,6 +103,7 @@ export async function getMemories(domain) {
   
   // 如果有过期的，清理存储
   if (valid.length !== memories.length) {
+    console.log(`[FormHelper] 淘汰 ${memories.length - valid.length} 条过期记忆`);
     await chrome.storage.local.set({ [STORAGE_KEYS.USER_MEMORIES]: valid });
   }
   
@@ -103,7 +115,7 @@ export async function getMemories(domain) {
 }
 
 /**
- * 保存一条记忆
+ * 保存一条记忆（自动去重、设默认过期、容量淘汰）
  * @param {Object} memory - 记忆对象
  * @param {string} memory.content - 记忆内容（自然语言描述）
  * @param {string} memory.category - 分类：intent(意图计划)、preference(偏好)、fact(事实)、context(上下文)
@@ -118,19 +130,160 @@ export async function saveMemory(memory) {
   memory.createdAt = memory.createdAt || Date.now();
   memory.domain = memory.domain || '*';
   
-  // 查找是否有相似的记忆需要更新（通过 id 或内容匹配）
-  const existIndex = memories.findIndex(m => m.id === memory.id);
-  if (existIndex >= 0) {
-    memories[existIndex] = { ...memories[existIndex], ...memory, updatedAt: Date.now() };
-  } else {
-    memories.unshift(memory);
+  // 如果 AI 未指定 expiresAt，根据 category 设置默认过期时间
+  if (memory.expiresAt === undefined || memory.expiresAt === null) {
+    const expireDays = DEFAULT_EXPIRE_DAYS[memory.category];
+    if (expireDays) {
+      memory.expiresAt = Date.now() + expireDays * 24 * 60 * 60 * 1000;
+    } else {
+      memory.expiresAt = null; // 永不过期
+    }
   }
   
-  // 最多保留 200 条记忆
-  if (memories.length > 200) memories.length = 200;
+  // 智能去重：查找同 category 下内容相似的记忆，用新的覆盖旧的
+  const duplicateIndex = findSimilarMemory(memories, memory);
+  if (duplicateIndex >= 0) {
+    // 用新记忆覆盖旧记忆（保留旧的 createdAt，更新内容和过期时间）
+    const old = memories[duplicateIndex];
+    memories[duplicateIndex] = {
+      ...old,
+      ...memory,
+      createdAt: old.createdAt, // 保留原始创建时间
+      updatedAt: Date.now(),
+    };
+    // 将更新的记忆移到最前面
+    const updated = memories.splice(duplicateIndex, 1)[0];
+    memories.unshift(updated);
+    console.log(`[FormHelper] 更新已有记忆: "${memory.content}"`);
+  } else {
+    // 查找是否有相同 id 的记忆
+    const existIndex = memories.findIndex(m => m.id === memory.id);
+    if (existIndex >= 0) {
+      memories[existIndex] = { ...memories[existIndex], ...memory, updatedAt: Date.now() };
+    } else {
+      memories.unshift(memory);
+    }
+  }
+  
+  // 容量淘汰：超出上限时，优先淘汰过期的和最旧的短期记忆
+  if (memories.length > MAX_MEMORIES) {
+    evictMemories(memories, MAX_MEMORIES);
+  }
   
   await chrome.storage.local.set({ [STORAGE_KEYS.USER_MEMORIES]: memories });
   return memory;
+}
+
+/**
+ * 查找与新记忆相似的已有记忆（用于去重更新）
+ * 判定条件：同 category + 同 domain + 内容相似度高
+ * @returns {number} 相似记忆的索引，-1 表示未找到
+ */
+function findSimilarMemory(memories, newMemory) {
+  for (let i = 0; i < memories.length; i++) {
+    const m = memories[i];
+    // 必须是同 category
+    if (m.category !== newMemory.category) continue;
+    // 必须是同 domain（或都是全局）
+    if (m.domain !== newMemory.domain) continue;
+    
+    // 内容相似度判断
+    if (isContentSimilar(m.content, newMemory.content)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * 判断两段记忆内容是否相似
+ * 策略：提取关键词（去除停用词和数字），计算 Jaccard 相似度
+ */
+function isContentSimilar(contentA, contentB) {
+  if (!contentA || !contentB) return false;
+  
+  // 完全相同
+  if (contentA === contentB) return true;
+  
+  const stopWords = new Set([
+    '的', '了', '在', '是', '有', '用户', '到', '去', '要', '会', '和', '与', '或', '等',
+    '把', '被', '从', '向', '对', '给', '让', '将', '已', '正在', '计划', '打算', '准备', '想要',
+    'the', 'a', 'an', 'is', 'are', 'was', 'to', 'for', 'of', 'in', 'on', 'at',
+  ]);
+  
+  const extractKeywords = (text) => {
+    // 去除数字和日期，按空格和中文标点分割
+    const cleaned = text.replace(/[\d\-\/\.\,\:]+/g, ' ');
+    const tokens = cleaned.split(/[\s，。、！？；：""''（）\(\)\[\]]+/).filter(Boolean);
+    // 进一步拆分中文（逐字）+ 保留英文单词
+    const keywords = new Set();
+    for (const token of tokens) {
+      if (/^[a-zA-Z]+$/.test(token)) {
+        // 英文单词
+        const lower = token.toLowerCase();
+        if (!stopWords.has(lower) && lower.length > 1) keywords.add(lower);
+      } else {
+        // 中文逐字拆分
+        for (const char of token) {
+          if (!stopWords.has(char) && char.trim()) keywords.add(char);
+        }
+      }
+    }
+    return keywords;
+  };
+  
+  const kwA = extractKeywords(contentA);
+  const kwB = extractKeywords(contentB);
+  
+  if (kwA.size === 0 || kwB.size === 0) return false;
+  
+  // Jaccard 相似度
+  let intersection = 0;
+  for (const w of kwA) {
+    if (kwB.has(w)) intersection++;
+  }
+  const union = kwA.size + kwB.size - intersection;
+  const similarity = intersection / union;
+  
+  // 阈值：0.5 以上视为相似（同一个主题的不同表述）
+  return similarity >= 0.5;
+}
+
+/**
+ * 容量淘汰：超出上限时按优先级删除记忆
+ * 淘汰顺序：已过期 > 最旧的 context > 最旧的 intent > 最旧的其他
+ * @param {Array} memories - 记忆数组（原地修改）
+ * @param {number} maxCount - 保留上限
+ */
+function evictMemories(memories, maxCount) {
+  const now = Date.now();
+  
+  // 第一轮：删除已过期的
+  for (let i = memories.length - 1; i >= 0 && memories.length > maxCount; i--) {
+    if (memories[i].expiresAt && memories[i].expiresAt <= now) {
+      memories.splice(i, 1);
+    }
+  }
+  if (memories.length <= maxCount) return;
+  
+  // 第二轮：从末尾开始删除最旧的 context
+  for (let i = memories.length - 1; i >= 0 && memories.length > maxCount; i--) {
+    if (memories[i].category === 'context') {
+      memories.splice(i, 1);
+    }
+  }
+  if (memories.length <= maxCount) return;
+  
+  // 第三轮：从末尾开始删除最旧的 intent
+  for (let i = memories.length - 1; i >= 0 && memories.length > maxCount; i--) {
+    if (memories[i].category === 'intent') {
+      memories.splice(i, 1);
+    }
+  }
+  if (memories.length <= maxCount) return;
+  
+  // 第四轮：直接截断
+  memories.length = maxCount;
 }
 
 /**
@@ -171,6 +324,17 @@ export async function saveRecord(record) {
     [STORAGE_KEYS.FORM_RECORDS]: records,
   });
   return record;
+}
+
+export async function updateRecord(id, updatedRecord) {
+  const records = await getRecords();
+  const index = records.findIndex(r => r.id === id);
+  if (index === -1) return null;
+  records[index] = { ...records[index], ...updatedRecord, id }; // 保持原 id
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.FORM_RECORDS]: records,
+  });
+  return records[index];
 }
 
 export async function deleteRecord(id) {

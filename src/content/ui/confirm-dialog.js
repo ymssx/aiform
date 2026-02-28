@@ -76,8 +76,7 @@ function createDialogElement(data, onClose) {
     borderRadius: '12px 12px 0 0',
   });
   header.innerHTML = `
-    <span style="font-size:20px">🤖</span>
-    <span style="font-weight:600;font-size:15px">AI 表单助手 - 检测到表单提交</span>
+    <span style="font-weight:600;font-size:15px">AI Form Helper - Form Submission Detected</span>
   `;
   dialog.appendChild(header);
 
@@ -89,7 +88,7 @@ function createDialogElement(data, onClose) {
     fontSize: '13px',
     color: '#666',
   });
-  formNameDiv.textContent = `📋 ${data.formName || '表单数据'}`;
+      formNameDiv.textContent = data.formName || '表单数据';
   dialog.appendChild(formNameDiv);
 
   // 字段列表
@@ -106,15 +105,24 @@ function createDialogElement(data, onClose) {
       const row = document.createElement('div');
       Object.assign(row.style, {
         display: 'flex',
+        flexDirection: 'column',
         padding: '8px 0',
         borderBottom: '1px solid #f0f0f0',
         fontSize: '13px',
-        gap: '8px',
+        gap: '4px',
+      });
+
+      // 头部：分类标签 + 字段名
+      const headerRow = document.createElement('div');
+      Object.assign(headerRow.style, {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
       });
 
       const categoryBadge = document.createElement('span');
       const categoryColors = {
-        personal: '#4CAF50',
+personal: '#667eea',
         contact: '#2196F3',
         address: '#FF9800',
         work: '#9C27B0',
@@ -128,28 +136,34 @@ function createDialogElement(data, onClose) {
         borderRadius: '4px',
         fontSize: '11px',
         flexShrink: '0',
-        height: 'fit-content',
       });
       categoryBadge.textContent = field.category;
 
       const label = document.createElement('span');
       Object.assign(label.style, {
         color: '#666',
-        minWidth: '80px',
-        flexShrink: '0',
+        fontSize: '12px',
       });
-      label.textContent = field.label + ':';
+      label.textContent = field.label;
 
-      const value = document.createElement('span');
+      headerRow.appendChild(categoryBadge);
+      headerRow.appendChild(label);
+
+      const value = document.createElement('div');
       Object.assign(value.style, {
         color: '#333',
         fontWeight: '500',
         wordBreak: 'break-all',
+        padding: '4px 8px',
+        background: '#f9f9f9',
+        borderRadius: '4px',
+        minHeight: '24px',
+        lineHeight: '1.5',
+        fontSize: '13px',
       });
-      value.textContent = field.value;
+      value.textContent = field.value || '-';
 
-      row.appendChild(categoryBadge);
-      row.appendChild(label);
+      row.appendChild(headerRow);
       row.appendChild(value);
       fieldList.appendChild(row);
     });
@@ -169,7 +183,7 @@ function createDialogElement(data, onClose) {
   });
 
   const cancelBtn = createButton('忽略', '#6c757d', () => onClose(false));
-  const confirmBtn = createButton('✅ 保存信息', '#667eea', () => onClose(true));
+const confirmBtn = createButton('✅ 保存信息', '#667eea', () => onClose(true));
   Object.assign(confirmBtn.style, { fontWeight: '600' });
 
   footer.appendChild(cancelBtn);

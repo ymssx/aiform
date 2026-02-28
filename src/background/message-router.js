@@ -9,7 +9,7 @@ import { buildExtractPrompt, buildFillPrompt, buildMemoryExtractPrompt } from '.
 import {
   getConfig, saveConfig,
   getProfile, saveProfile, mergeProfile,
-  getRecords, saveRecord, deleteRecord, clearAll,
+  getRecords, saveRecord, updateRecord, deleteRecord, clearAll,
   getMemories, saveMemory, saveMemories, deleteMemory,
   getSDKConfig, saveSDKConfig,
 } from './storage-manager.js';
@@ -41,16 +41,21 @@ async function handleMessage(message, sender) {
       return { success: true, data: result };
     }
 
-    // ========== 保存表单记录 + 合并到用户画像 ==========
+    // ========== 保存表单记录 + 合并到用户画像 + 提取记忆 ==========
     case MSG.SAVE_RECORD: {
       const record = await saveRecord(data.record);
 
       // 将字段数据合并到用户画像
       if (data.record.fields && data.record.fields.length > 0) {
         const profileUpdate = fieldsToProfile(data.record.fields);
-        const changeLog = data.record.fields.map(f => `从表单获取: ${f.label} = ${f.value}`);
+        const changeLog = data.record.fields.map(f => `Extract from form: ${f.label} = ${f.value}`);
         await mergeProfile(profileUpdate, changeLog, `form_submit:${data.record.domain}`);
       }
+
+      // 异步提取记忆（不阻塞主流程）
+      extractMemoriesFromRecord(data.record).catch(err => {
+        console.warn('[FormHelper] Memory extraction failed:', err.message);
+      });
 
       return { success: true, data: record };
     }
@@ -68,8 +73,9 @@ async function handleMessage(message, sender) {
       const { simplifiedDOM, userSupplement, pageContext, domain } = data;
       const profile = await getProfile();
       const memories = await getMemories(domain || '*');
+      const config = await getConfig();
 
-      const prompt = buildFillPrompt(simplifiedDOM, profile, memories, userSupplement, pageContext);
+      const prompt = buildFillPrompt(simplifiedDOM, profile, memories, userSupplement, pageContext, { quickMode: config.quickMode });
       const result = await callAIForJSON(prompt);
 
       // 更新用户画像
@@ -100,7 +106,7 @@ async function handleMessage(message, sender) {
     }
 
     case MSG.GET_MEMORIES: {
-      const memories = await getMemories(data.domain);
+      const memories = await getMemories(data?.domain);
       return { success: true, data: memories };
     }
 
@@ -146,6 +152,14 @@ async function handleMessage(message, sender) {
     case MSG.GET_RECORDS: {
       const records = await getRecords();
       return { success: true, data: records };
+    }
+
+    case MSG.UPDATE_RECORD: {
+      const updated = await updateRecord(data.id, data.record);
+      if (updated) {
+        return { success: true, data: updated };
+      }
+      return { success: false, error: 'Record not found' };
     }
 
     case MSG.DELETE_RECORD: {
@@ -202,22 +216,68 @@ function fieldsToProfile(fields) {
       case 'preference':
         profile.preferences[key] = value;
         break;
-      default:
-        profile.custom[key || label] = value;
+      default: {
+        // 过滤掉不属于个人信息的内容型字段
+        const excludePatterns = [
+          'message', 'subject', 'comment', 'description', 'content', 'body',
+          'note', 'remark', 'feedback', 'question', 'inquiry', 'detail',
+          'reason', 'purpose', 'requirement', 'suggestion', 'opinion',
+          'text', 'textarea', 'captcha', 'verify', 'code', 'token',
+          'csrf', 'password', 'submit', 'action',
+        ];
+        const fieldKey = (key || label || '').toLowerCase();
+        const shouldExclude = excludePatterns.some(p => fieldKey.includes(p));
+        if (!shouldExclude) {
+          profile.custom[key || label] = value;
+        }
         break;
+      }
     }
   }
 
   // 组装地址
   if (Object.keys(addressInfo).length > 0) {
     profile.addresses = [{
-      label: '默认地址',
+      label: 'Default Address',
       ...addressInfo,
       fullAddress: Object.values(addressInfo).join(''),
     }];
   }
 
   return profile;
+}
+
+/**
+ * 从已保存的记录中提取记忆（异步，不阻塞主流程）
+ * 将结构化字段数据转为自然语言描述，让 AI 提取有价值的记忆
+ */
+async function extractMemoriesFromRecord(record) {
+  if (!record.fields || record.fields.length === 0) return;
+
+  // 将结构化字段转为自然语言描述
+  const fieldDescriptions = record.fields
+    .filter(f => f.value)
+    .map(f => `${f.label || f.key}: ${f.value}`)
+    .join('\n');
+
+  const summary = `User submitted a form "${record.formName || 'Unknown Form'}" on ${record.domain || 'unknown site'}.\nPage: ${record.pageTitle || ''}\nFields:\n${fieldDescriptions}`;
+
+  try {
+    const prompt = buildMemoryExtractPrompt(summary, `Domain: ${record.domain}, URL: ${record.url}`);
+    const result = await callAIForJSON(prompt);
+
+    if (result.memories && result.memories.length > 0) {
+      const domain = record.domain || '*';
+      for (const mem of result.memories) {
+        mem.domain = domain;
+        mem.source = 'record_extract';
+      }
+      await saveMemories(result.memories);
+      console.log(`[FormHelper] Extracted ${result.memories.length} memories from record`);
+    }
+  } catch (err) {
+    console.warn('[FormHelper] Memory extraction from record failed:', err.message);
+  }
 }
 
 export { handleMessage };

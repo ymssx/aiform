@@ -48,7 +48,9 @@ fs.copyFileSync(path.join(ROOT, 'src/popup/index.html'), path.join(DIST, 'popup.
 let popupHtml = fs.readFileSync(path.join(DIST, 'popup.html'), 'utf-8');
 popupHtml = popupHtml.replace('src="popup.js"', 'src="popup.js"');
 fs.writeFileSync(path.join(DIST, 'popup.html'), popupHtml);
-fs.copyFileSync(path.join(ROOT, 'src/popup/popup.js'), path.join(DIST, 'popup.js'));
+// 构建 popup.js（合并 icons.js + popup.js，处理 import/export）
+const popupCode = buildPopup();
+fs.writeFileSync(path.join(DIST, 'popup.js'), popupCode);
 
 // ========== 6. 生成占位图标 ==========
 generatePlaceholderIcons();
@@ -145,6 +147,24 @@ function buildContentScript() {
   }
 
   code += '})();\n';
+  return code;
+}
+
+function buildPopup() {
+  const files = [
+    'shared/icons.js',
+    'popup/popup.js',
+  ];
+
+  let code = '// AI 表单助手 - Popup (自动构建)\n';
+  code += '// 构建时间: ' + new Date().toISOString() + '\n\n';
+
+  for (const file of files) {
+    code += `// ========== ${file} ==========\n`;
+    code += stripModuleSyntax(readSrc(file));
+    code += '\n\n';
+  }
+
   return code;
 }
 
